@@ -1,0 +1,41 @@
+name: Oppdater magasindata
+
+on:
+  schedule:
+    # NVE publiserer nye tall onsdag kl. 13:00 norsk tid.
+    # Cron kjører i UTC, og Norge veksler mellom UTC+1 (vintertid) og UTC+2 (sommertid),
+    # så vi kjører to ganger for å treffe 13:07 norsk tid uansett årstid.
+    - cron: '7 11 * * 3'  # 13:07 norsk sommertid (UTC+2)
+    - cron: '7 12 * * 3'  # 13:07 norsk vintertid (UTC+1)
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sjekk ut repo
+        uses: actions/checkout@v4
+
+      - name: Hent data fra NVE API
+        run: |
+          curl -sS --fail \
+            'https://biapi.nve.no/magasinstatistikk/api/Magasinstatistikk/HentOffentligData' \
+            -o docs/data.json.tmp
+          # Valider at responsen er gyldig, ikke-tom JSON før vi erstatter filen
+          python3 -c "import json,sys; data=json.load(open('docs/data.json.tmp')); sys.exit(0 if isinstance(data, list) and len(data) > 0 else 1)"
+          mv docs/data.json.tmp docs/data.json
+
+      - name: Commit og push hvis dataene er endret
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if git diff --quiet -- docs/data.json; then
+            echo "Ingen endringer i dataene."
+            exit 0
+          fi
+          git add docs/data.json
+          git commit -m "Oppdater magasindata $(date -u +%Y-%m-%d)"
+          git push

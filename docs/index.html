@@ -267,6 +267,7 @@
 <script>
 'use strict';
 
+const LOCAL_DATA   = 'data.json';
 const API          = 'https://biapi.nve.no/magasinstatistikk/api/Magasinstatistikk/HentOffentligData';
 const CURRENT_YEAR = new Date().getFullYear();
 const HIST_YEARS   = 20;
@@ -669,12 +670,22 @@ function detectLandFilter() {
 }
 
 // ── Bootstrap ────────────────────────────────────────────────
+async function fetchData(url) {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`HTTP ${res.status} – ${res.statusText}`);
+  const data = await res.json();
+  if (!Array.isArray(data) || !data.length) throw new Error('Tom respons');
+  return data;
+}
+
 async function init() {
   try {
-    const res = await fetch(API);
-    if (!res.ok) throw new Error(`HTTP ${res.status} – ${res.statusText}`);
-    allData = await res.json();
-    if (!Array.isArray(allData) || !allData.length) throw new Error('Tom respons fra API');
+    try {
+      allData = await fetchData(LOCAL_DATA);
+    } catch (localErr) {
+      // Lokal fil mangler eller er ugyldig – fall tilbake til NVE sitt API direkte.
+      allData = await fetchData(API);
+    }
     detectLandFilter();
     renderTabs();
     renderView();
