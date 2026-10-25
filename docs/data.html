@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Magasin og pris – data</title>
+  <meta name="theme-color" content="#004890">
+  <style>
+    :root {
+      --navy:  #004890;
+      --blue:  #0072b0;
+      --tint:  #e6f0f8;
+      --text:  #111827;
+      --sub:   #6b7280;
+      --border:#e5e7eb;
+      --bg:    #f4f7fb;
+      --card:  #ffffff;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--navy);
+      color: #fff;
+      padding: 14px 16px 12px;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+    .header-inner { display: flex; align-items: center; gap: 10px; max-width: 1100px; margin: 0 auto; }
+    header h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
+    header p  { font-size: .72rem; opacity: .75; margin-top: 2px; }
+    .hdr-link {
+      margin-left: auto;
+      color: #fff;
+      font-size: .78rem;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,.4);
+      border-radius: 8px;
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+
+    /* ── Region tabs ── */
+    .tabs-bar {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 0 8px;
+      gap: 2px;
+    }
+    .tabs-bar::-webkit-scrollbar { display: none; }
+    .tab {
+      flex-shrink: 0;
+      padding: 11px 13px;
+      font-size: .82rem;
+      font-weight: 500;
+      color: var(--sub);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    .page { padding: 16px; max-width: 1100px; margin: 0 auto; }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      margin-bottom: 14px;
+    }
+
+    /* ── Controls ── */
+    .controls { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: flex-end; }
+    .control label { display: block; font-size: .68rem; color: var(--sub); margin-bottom: 4px; }
+    .control select {
+      font: inherit;
+      font-size: .82rem;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+    }
+    .seg { display: inline-flex; background: var(--tint); border-radius: 8px; padding: 2px; }
+    .seg button {
+      border: none;
+      background: none;
+      font: inherit;
+      font-size: .78rem;
+      color: var(--sub);
+      padding: 6px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .seg button.active { background: var(--card); color: var(--navy); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    .downloads { margin-left: auto; display: flex; gap: 8px; }
+    .btn {
+      font: inherit;
+      font-size: .8rem;
+      font-weight: 600;
+      border-radius: 8px;
+      padding: 8px 12px;
+      cursor: pointer;
+      border: 1px solid var(--blue);
+      background: var(--blue);
+      color: #fff;
+    }
+    .btn.secondary { background: var(--card); color: var(--blue); }
+    .btn:disabled { opacity: .5; cursor: wait; }
+
+    /* ── Table ── */
+    .summary { font-size: .75rem; color: var(--sub); margin-bottom: 10px; }
+    .table-wrap { overflow: auto; max-height: 70vh; border: 1px solid var(--border); border-radius: 10px; }
+    table { border-collapse: separate; border-spacing: 0; font-size: .78rem; width: 100%; }
+    th, td { padding: 7px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: #f8fafc;
+      font-weight: 600;
+      color: var(--sub);
+      font-size: .7rem;
+      text-align: right;
+      vertical-align: bottom;
+    }
+    td { text-align: right; font-variant-numeric: tabular-nums; }
+    th:first-child, td:first-child {
+      position: sticky;
+      left: 0;
+      background: var(--card);
+      text-align: left;
+      z-index: 1;
+    }
+    th:first-child { z-index: 3; background: #f8fafc; }
+    th .unit { display: block; font-weight: 400; font-size: .65rem; }
+    td.empty { color: #c0c6cf; }
+    tbody tr:hover td { background: var(--tint); }
+    .more { margin-top: 10px; text-align: center; }
+
+    .note { font-size: .72rem; color: var(--sub); line-height: 1.5; }
+    .note + .note { margin-top: 6px; }
+
+    .error-box {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      padding: 16px;
+      color: #b91c1c;
+      font-size: .83rem;
+    }
+
+    footer { text-align: center; padding: 16px 16px 24px; font-size: .72rem; color: var(--sub); }
+    footer a { color: var(--blue); text-decoration: none; }
+
+    @media (max-width: 600px) {
+      .downloads { margin-left: 0; width: 100%; }
+      .downloads .btn { flex: 1; }
+    }
+  </style>
+</head>
+<body>
+<header>
+  <div class="header-inner">
+    <div>
+      <h1>Magasin og pris – data</h1>
+      <p id="hdr-sub">Laster data…</p>
+    </div>
+    <a class="hdr-link" href="index.html">← Oversikt</a>
+  </div>
+</header>
+<div class="tabs-bar" id="tabs-bar"></div>
+<div class="page">
+  <div class="card">
+    <div class="controls">
+      <div class="control">
+        <label for="from-year">Fra år</label>
+        <select id="from-year"></select>
+      </div>
+      <div class="control">
+        <label for="to-year">Til år</label>
+        <select id="to-year"></select>
+      </div>
+      <div class="control">
+        <label>Oppløsning</label>
+        <div class="seg" id="seg-res">
+          <button data-v="uke">Uke</button>
+          <button data-v="maned">Måned</button>
+          <button data-v="ar">År</button>
+        </div>
+      </div>
+      <div class="downloads">
+        <button class="btn" id="btn-xlsx">Last ned Excel</button>
+        <button class="btn secondary" id="btn-csv">CSV</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="summary" id="summary"></div>
+    <div id="table-host"></div>
+  </div>
+
+  <div class="card">
+    <div class="note"><strong>Om dataene.</strong> Fyllingsgrad, fylling og kapasitet er NVEs ukentlige magasinstatistikk
+      (fra 1995). Priser er tidsvektede ukesnitt av day-ahead-priser fra ENTSO-E (fra 2015), i EUR/MWh.
+      Uker følger ISO-ukenummer i norsk tid. «Norge» viser fylling for hele landet og et enkelt snitt av prisene i NO1–NO5.</div>
+    <div class="note">«Avvik normalår» er fyllingsgraden minus medianen for samme uke de 20 siste hele årene, samme
+      definisjon som på oversiktssiden. Måneds- og årsverdier er snitt av ukene; måned bestemmes av ukas dato (søndag).
+      Siste uke kan være ufullstendig.</div>
+  </div>
+</div>
+<footer>
+  Data: <a href="https://www.nve.no/energi/analyser-og-statistikk/magasinstatistikk/" target="_blank" rel="noopener">NVE Magasinstatistikk</a>
+  &nbsp;·&nbsp; Priser: <a href="https://transparency.entsoe.eu/" target="_blank" rel="noopener">ENTSO-E</a>
+</footer>
+
+<script src="felles.js"></script>
+<script>
+'use strict';
+
+const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+const TABS = [...REGIONS.map(r => ({ key: r.key, label: r.label, name: r.name })),
+              { key: 'ALLE', label: 'Alle områder', name: 'Alle områder' }];
+const MONTHS = ['januar', 'februar', 'mars', 'april', 'mai', 'juni',
+                'juli', 'august', 'september', 'oktober', 'november', 'desember'];
+const PAGE_ROWS = 52;
+
+let allData   = [];
+let priceData = null;
+const state = { key: 'LAND', res: 'uke', from: CURRENT_YEAR - 4, to: CURRENT_YEAR, showAll: false };
+
+// ── Kolonner ─────────────────────────────────────────────────
+// Hver kolonne: key, label, unit, digits. Tidskolonnene (år/uke/måned/dato) legges til per oppløsning.
+function valueColumns() {
+  if (state.key === 'ALLE') {
+    return [
+      ...REGIONS.map(r => ({ key: `pct_${r.key}`, label: `Fylling ${r.label}`, unit: '%', digits: 1 })),
+      ...PRICE_AREAS.map(a => ({ key: `pris_${a}`, label: `Pris ${a}`, unit: '€/MWh', digits: 2 })),
+      { key: 'prisDE', label: 'Pris DE-LU', unit: '€/MWh', digits: 2 },
+    ];
+  }
+  return [
+    { key: 'pct',     label: 'Fyllingsgrad',    unit: '%',     digits: 1 },
+    { key: 'twh',     label: 'Fylling',         unit: 'TWh',   digits: 2 },
+    { key: 'cap',     label: 'Kapasitet',       unit: 'TWh',   digits: 2 },
+    ...(state.res === 'uke' ? [{ key: 'endring', label: 'Endring', unit: 'pp', digits: 1 }] : []),
+    { key: 'avvik',   label: 'Avvik normalår',  unit: 'pp',    digits: 1 },
+    { key: 'pris',    label: state.key === 'LAND' ? 'Pris snitt NO1–NO5' : 'Pris', unit: '€/MWh', digits: 2 },
+    { key: 'prisDE',  label: 'Pris DE-LU',      unit: '€/MWh', digits: 2 },
+  ];
+}
+
+function timeColumns() {
+  if (state.res === 'uke')   return [{ key: 'aar', label: 'År' }, { key: 'iso_uke', label: 'Uke' }, { key: 'dato', label: 'Dato (søndag)' }];
+  if (state.res === 'maned') return [{ key: 'periode', label: 'Måned' }];
+  return [{ key: 'periode', label: 'År' }];
+}
+
+// ── Rader ────────────────────────────────────────────────────
+const tableCache = {};
+function weekTable(key) {
+  return tableCache[key] ??= buildWeekTable(allData, priceData, key);
+}
+
+function weeklyRows() {
+  if (state.key !== 'ALLE') return weekTable(state.key);
+  // Bred tabell: én rad per uke med fylling og pris for alle områder
+  const byWeek = new Map();
+  for (const r of REGIONS) {
+    for (const w of weekTable(r.key)) {
+      const k = `${w.iso_aar}-${w.iso_uke}`;
+      const row = byWeek.get(k) ?? { iso_aar: w.iso_aar, iso_uke: w.iso_uke, dato: w.dato, prisDE: w.prisDE };
+      row[`pct_${r.key}`] = w.pct;
+      if (r.key !== 'LAND') row[`pris_${r.key}`] = w.pris;
+      byWeek.set(k, row);
+    }
+  }
+  return [...byWeek.values()].sort((a, b) => (a.iso_aar - b.iso_aar) || (a.iso_uke - b.iso_uke));
+}
+
+function aggregate(rows, cols) {
+  const groups = new Map();
+  for (const r of rows) {
+    const [y, m] = r.dato.split('-').map(Number);
+    const k = state.res === 'maned' ? `${y}-${String(m).padStart(2, '0')}` : `${y}`;
+    let g = groups.get(k);
+    if (!g) {
+      g = { sortKey: k, aar: y, periode: state.res === 'maned' ? `${MONTHS[m - 1]} ${y}` : `${y}`, acc: {} };
+      groups.set(k, g);
+    }
+    for (const c of cols) {
+      if (r[c.key] == null) continue;
+      const a = (g.acc[c.key] ??= [0, 0]);
+      a[0] += r[c.key];
+      a[1]++;
+    }
+  }
+  return [...groups.values()].map(g => {
+    const out = { sortKey: g.sortKey, aar: g.aar, periode: g.periode };
+    for (const c of cols) out[c.key] = g.acc[c.key] ? g.acc[c.key][0] / g.acc[c.key][1] : null;
+    return out;
+  });
+}
+
+function currentRows() {
+  const cols = valueColumns();
+  const weeks = weeklyRows();
+  let rows;
+  if (state.res === 'uke') {
+    rows = weeks
+      .filter(r => r.iso_aar >= state.from && r.iso_aar <= state.to)
+      .map(r => ({ ...r, aar: r.iso_aar }));
+  } else {
+    rows = aggregate(weeks, cols).filter(r => r.aar >= state.from && r.aar <= state.to);
+  }
+  return rows.reverse();   // nyeste først
+}
+
+// ── Formatering ──────────────────────────────────────────────
+const nf = {};
+function fmt(v, digits) {
+  if (v == null) return '–';
+  nf[digits] ??= new Intl.NumberFormat('nb-NO', { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  return nf[digits].format(v);
+}
+
+function round(v, digits) {
+  return v == null ? null : Math.round(v * 10 ** digits) / 10 ** digits;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// ── Visning ──────────────────────────────────────────────────
+function renderTabs() {
+  document.getElementById('tabs-bar').innerHTML = TABS.map(t => `
+    <button class="tab${t.key === state.key ? ' active' : ''}" data-key="${t.key}">${t.label}</button>
+  `).join('');
+}
+
+function renderTable() {
+  for (const b of document.querySelectorAll('#seg-res button')) {
+    b.classList.toggle('active', b.dataset.v === state.res);
+  }
+  const tcols = timeColumns();
+  const vcols = valueColumns();
+  const rows  = currentRows();
+  const shown = state.showAll ? rows : rows.slice(0, PAGE_ROWS);
+  const tab   = TABS.find(t => t.key === state.key);
+  const resWord = { uke: 'uker', maned: 'måneder', ar: 'år' }[state.res];
+
+  document.getElementById('summary').textContent =
+    `${tab.name} · ${rows.length} ${resWord} · ${state.from}–${state.to} · nyeste først`;
+
+  const head = [...tcols.map(c => `<th>${c.label}</th>`),
+                ...vcols.map(c => `<th>${c.label}<span class="unit">${c.unit}</span></th>`)].join('');
+  const body = shown.map(r => `<tr>${
+    tcols.map(c => `<td>${escapeHtml(r[c.key] ?? '')}</td>`).join('') +
+    vcols.map(c => `<td${r[c.key] == null ? ' class="empty"' : ''}>${fmt(r[c.key], c.digits)}</td>`).join('')
+  }</tr>`).join('');
+
+  document.getElementById('table-host').innerHTML = `
+    <div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>
+    ${rows.length > shown.length
+      ? `<div class="more"><button class="btn secondary" id="btn-more">Vis alle ${rows.length} rader</button></div>`
+      : ''}`;
+  document.getElementById('btn-more')?.addEventListener('click', () => { state.showAll = true; renderTable(); });
+}
+
+function fillYearSelects() {
+  const years = allData.map(d => d.iso_aar);
+  const min = Math.min(...years), max = Math.max(...years);
+  const opts = sel => Array.from({ length: max - min + 1 }, (_, i) => max - i)
+    .map(y => `<option value="${y}"${y === sel ? ' selected' : ''}>${y}</option>`).join('');
+  state.to = max;
+  state.from = Math.max(min, max - 4);
+  document.getElementById('from-year').innerHTML = opts(state.from);
+  document.getElementById('to-year').innerHTML = opts(state.to);
+}
+
+// ── Eksport ──────────────────────────────────────────────────
+function exportMatrix() {
+  const tcols = timeColumns();
+  const vcols = valueColumns();
+  const header = [...tcols.map(c => c.label), ...vcols.map(c => `${c.label} (${c.unit})`)];
+  const rows = currentRows().reverse().map(r => [
+    ...tcols.map(c => r[c.key] ?? ''),
+    ...vcols.map(c => round(r[c.key], c.digits)),
+  ]);
+  return [header, ...rows];
+}
+
+function fileName(ext) {
+  return `magasin-pris_${state.key}_${state.res}_${state.from}-${state.to}.${ext}`;
+}
+
+function aboutSheet() {
+  const tab = TABS.find(t => t.key === state.key);
+  return [
+    ['Magasinfylling og strømpriser'],
+    [],
+    ['Område', tab.name],
+    ['Periode', `${state.from}–${state.to}`],
+    ['Oppløsning', { uke: 'Uke', maned: 'Måned (snitt av uker)', ar: 'År (snitt av uker)' }[state.res]],
+    ['Lastet ned', new Date().toLocaleString('nb-NO')],
+    [],
+    ['Kilde magasin', 'NVE Magasinstatistikk, https://www.nve.no/energi/analyser-og-statistikk/magasinstatistikk/'],
+    ['Kilde priser', 'ENTSO-E Transparency Platform, day-ahead-priser (A44), https://transparency.entsoe.eu/'],
+    [],
+    ['Fyllingsgrad', 'Prosent av magasinkapasitet'],
+    ['Avvik normalår', `Prosentpoeng fra median for samme uke ${CURRENT_YEAR - HIST_YEARS}–${CURRENT_YEAR - 1}`],
+    ['Pris', 'Tidsvektet ukesnitt av day-ahead-pris, EUR/MWh. «Norge» = enkelt snitt av NO1–NO5'],
+    ['Pris DE-LU', 'Tysk budområde (DE-AT-LU før oktober 2018), EUR/MWh'],
+    ['Uker', 'ISO-uker i norsk tid. Siste uke kan være ufullstendig'],
+  ];
+}
+
+let xlsxPromise = null;
+function loadXlsx() {
+  return xlsxPromise ??= new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = XLSX_URL;
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = () => { xlsxPromise = null; reject(new Error('Kunne ikke laste Excel-biblioteket')); };
+    document.head.appendChild(s);
+  });
+}
+
+async function downloadXlsx() {
+  const btn = document.getElementById('btn-xlsx');
+  btn.disabled = true;
+  try {
+    const XLSX = await loadXlsx();
+    const matrix = exportMatrix();
+    const ws = XLSX.utils.aoa_to_sheet(matrix);
+    ws['!cols'] = matrix[0].map((h, i) => ({ wch: Math.max(10, i < timeColumns().length ? 14 : h.length + 2) }));
+    const about = XLSX.utils.aoa_to_sheet(aboutSheet());
+    about['!cols'] = [{ wch: 16 }, { wch: 90 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Data');
+    XLSX.utils.book_append_sheet(wb, about, 'Om dataene');
+    XLSX.writeFile(wb, fileName('xlsx'));
+  } catch (err) {
+    alert(err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// CSV med semikolon og desimalkomma, slik norsk Excel forventer
+function downloadCsv() {
+  const cell = v => {
+    if (v == null || v === '') return '';
+    if (typeof v === 'number') return String(v).replace('.', ',');
+    return /[;"\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v;
+  };
+  const csv = exportMatrix().map(r => r.map(cell).join(';')).join('\r\n');
+  const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = fileName('csv');
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+// ── Oppstart ─────────────────────────────────────────────────
+function bindControls() {
+  document.getElementById('tabs-bar').addEventListener('click', e => {
+    const key = e.target.dataset?.key;
+    if (!key) return;
+    state.key = key;
+    state.showAll = false;
+    renderTabs();
+    renderTable();
+  });
+  document.getElementById('seg-res').addEventListener('click', e => {
+    const v = e.target.dataset?.v;
+    if (!v) return;
+    state.res = v;
+    state.showAll = false;
+    renderTable();
+  });
+  for (const [id, field] of [['from-year', 'from'], ['to-year', 'to']]) {
+    document.getElementById(id).addEventListener('change', e => {
+      state[field] = Number(e.target.value);
+      if (state.from > state.to) {
+        [state.from, state.to] = [state.to, state.from];
+        document.getElementById('from-year').value = state.from;
+        document.getElementById('to-year').value = state.to;
+      }
+      state.showAll = false;
+      renderTable();
+    });
+  }
+  document.getElementById('btn-xlsx').addEventListener('click', downloadXlsx);
+  document.getElementById('btn-csv').addEventListener('click', downloadCsv);
+}
+
+async function init() {
+  const pricesPromise = fetchPrices();
+  try {
+    allData = await loadReservoirData();
+    priceData = await pricesPromise;
+    const latest = getRows(allData, 'LAND').at(-1);
+    document.getElementById('hdr-sub').textContent = latest ? `Siste: ${weekLabel(latest)}` : '';
+    fillYearSelects();
+    bindControls();
+    renderTabs();
+    renderTable();
+  } catch (err) {
+    document.getElementById('hdr-sub').textContent = 'Feil ved lasting';
+    document.getElementById('table-host').innerHTML =
+      `<div class="error-box"><strong>Kunne ikke laste data</strong><br>${escapeHtml(err.message)}</div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
