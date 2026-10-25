@@ -152,8 +152,6 @@ function buildWeekTable(allData, priceData, key) {
       avvik:   pct != null && nrm != null ? pct - nrm : null,
       pris:    p,
       prisDE:  de,
-      // Norsk pris i prosent av tysk; uinteressant når tysk pris er nær null eller negativ
-      prisPctDE: p != null && de != null && de > 5 ? (p / de) * 100 : null,
     };
   });
 }
