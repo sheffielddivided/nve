@@ -338,9 +338,9 @@ let activeKey  = 'LAND';
 let lineChart  = null;
 let donutChart = null;
 let priceChart = null;
-let priceData  = null;   // { enhet, omrader: { NO1: [...] }, referanse: { 'DE-LU': [...] } }
-let scatterChart = null;
-const analysis = { y: 'pris', period: 'alle' };
+let priceData  = null;   // { enhet, omrader: { NO1: [...] }, referanse: { 'DE-LU': [...], SE2: [...] } }
+let scatterCharts = [];
+const analysis = { period: 'alle', ref: null };   // ref null = standard for området
 
 // ── Build per-week chart data ─────────────────────────────────
 function buildChartData(rows) {
@@ -406,6 +406,7 @@ function renderTabs() {
 
 function switchRegion(key) {
   activeKey = key;
+  analysis.ref = null;
   renderTabs();
   renderView();
 }
@@ -527,13 +528,13 @@ function renderView() {
 
     <div class="chart-card">
       <div class="chart-head">
-        <div class="title">Analyse: magasinfylling og pris</div>
-        <div class="sub">${priceName} · hver prikk er én uke fra 2015</div>
+        <div class="title">Analyse: hva henger prisen sammen med?</div>
+        <div class="sub">${priceName} · norsk pris mot magasinfylling og utenlandsk pris · én prikk per uke</div>
       </div>
       <div class="seg-row">
-        <div class="seg" id="seg-y">
-          <button data-v="pris">€/MWh</button>
-          <button data-v="pct">% av tysk pris</button>
+        <div class="seg" id="seg-ref">
+          <button data-v="DE">Mot Tyskland</button>
+          <button data-v="SE2">Mot Sverige (SE2)</button>
         </div>
         <div class="seg" id="seg-period">
           <button data-v="alle">Alle år</button>
@@ -549,7 +550,7 @@ function renderView() {
   drawYearChart(chartData);
   drawPriceChart(priceChartData);
   if (priceChartData) {
-    for (const [id, field] of [['seg-y', 'y'], ['seg-period', 'period']]) {
+    for (const [id, field] of [['seg-ref', 'ref'], ['seg-period', 'period']]) {
       document.getElementById(id).onclick = e => {
         const v = e.target.dataset?.v;
         if (!v) return;
@@ -797,7 +798,7 @@ function drawPriceChart(data) {
   });
 }
 
-// ── Analyse: fylling vs. normalår mot pris ────────────────────
+// ── Analyse: norsk pris mot magasinfylling og utenlandsk pris ─
 const PERIODS = {
   alle:   { label: 'alle år',   test: y => true },
   tidlig: { label: '2015–2020', test: y => y <= 2020 },
@@ -816,76 +817,109 @@ function ranks(values) {
   return r;
 }
 
-function pearson(xs, ys) {
-  const n = xs.length;
-  const mx = xs.reduce((a, b) => a + b, 0) / n;
-  const my = ys.reduce((a, b) => a + b, 0) / n;
-  let sxy = 0, sxx = 0, syy = 0;
-  for (let i = 0; i < n; i++) {
-    sxy += (xs[i] - mx) * (ys[i] - my);
-    sxx += (xs[i] - mx) ** 2;
-    syy += (ys[i] - my) ** 2;
-  }
-  return { r: sxy / Math.sqrt(sxx * syy), slope: sxy / sxx, intercept: my - (sxy / sxx) * mx };
+const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+
+function cov(a, b) {
+  const ma = mean(a), mb = mean(b);
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += (a[i] - ma) * (b[i] - mb);
+  return s;
 }
+
+// Enkel lineær regresjon y = a + b·x, med korrelasjon
+function fitLine(xs, ys) {
+  const sxy = cov(xs, ys), sxx = cov(xs, xs), syy = cov(ys, ys);
+  const slope = sxy / sxx;
+  return { r: sxy / Math.sqrt(sxx * syy), slope, intercept: mean(ys) - slope * mean(xs) };
+}
+
+// Regresjon med to forklaringsvariabler: y = a + b1·x1 + b2·x2
+function fitTwo(x1, x2, y) {
+  const s11 = cov(x1, x1), s22 = cov(x2, x2), s12 = cov(x1, x2);
+  const s1y = cov(x1, y), s2y = cov(x2, y), syy = cov(y, y);
+  const det = s11 * s22 - s12 * s12;
+  const b1 = (s1y * s22 - s2y * s12) / det;
+  const b2 = (s2y * s11 - s1y * s12) / det;
+  return {
+    b1, b2,
+    a: mean(y) - b1 * mean(x1) - b2 * mean(x2),
+    r2: (b1 * s1y + b2 * s2y) / syy,
+  };
+}
+
+const spearman = (xs, ys) => fitLine(ranks(xs), ranks(ys)).r;
 
 function strengthWord(rho) {
   const a = Math.abs(rho);
   return a < 0.2 ? 'Ingen tydelig' : a < 0.4 ? 'Svak' : a < 0.6 ? 'Moderat' : 'Sterk';
 }
 
+// Utenlandsk referansepris. NO3 og NO4 henger tettere sammen med Sverige enn med Tyskland.
+const REFS = {
+  DE:  { field: 'prisDE',  name: 'tysk pris',  label: 'Tysk pris',  country: 'Tyskland',
+         desc: 'tysk pris er DE-LU (DE-AT-LU før oktober 2018)' },
+  SE2: { field: 'prisSE2', name: 'svensk pris', label: 'Svensk pris (SE2)', country: 'Sverige (SE2)',
+         desc: 'svensk pris er budområde SE2 (Sundsvall)' },
+};
+const defaultRef = key => (key === 'NO3' || key === 'NO4') ? 'SE2' : 'DE';
+
+const signed = (v, digits) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(digits)}`;
+
 function renderAnalysis() {
-  for (const [id, field] of [['seg-y', 'y'], ['seg-period', 'period']]) {
-    for (const b of document.querySelectorAll(`#${id} button`)) {
-      b.classList.toggle('active', b.dataset.v === analysis[field]);
-    }
+  const refKey = analysis.ref ?? defaultRef(activeKey);
+  const ref    = REFS[refKey];
+  for (const [id, v] of [['seg-ref', refKey], ['seg-period', analysis.period]]) {
+    for (const b of document.querySelectorAll(`#${id} button`)) b.classList.toggle('active', b.dataset.v === v);
   }
-
-  const yField = analysis.y === 'pct' ? 'prisPctDE' : 'pris';
-  const yUnit  = analysis.y === 'pct' ? '% av tysk pris' : '€/MWh';
-  const fmtY   = v => analysis.y === 'pct' ? `${v.toFixed(0)} %` : `${v.toFixed(1)} €/MWh`;
   const period = PERIODS[analysis.period];
-
-  const table  = buildWeekTable(allData, priceData, activeKey);
-  const usable = table.filter(r => r.avvik != null && r[yField] != null);
+  const usable = buildWeekTable(allData, priceData, activeKey)
+    .filter(r => r.avvik != null && r.pris != null && r[ref.field] != null);
   const pts    = usable.filter(r => period.test(r.iso_aar));
   const latest = usable[usable.length - 1];
   const body   = document.getElementById('analysis-body');
 
+  scatterCharts.forEach(c => c.destroy());
+  scatterCharts = [];
+
   if (pts.length < 20) {
-    body.innerHTML = `<div class="note">For få uker med både fylling og pris til å si noe om sammenhengen.</div>`;
-    if (scatterChart) { scatterChart.destroy(); scatterChart = null; }
+    body.innerHTML = `<div class="note">For få uker med fylling, norsk og ${ref.name} til å si noe om sammenhengen.</div>`;
     return;
   }
 
-  const xs  = pts.map(r => r.avvik);
-  const ys  = pts.map(r => r[yField]);
-  const rho = pearson(ranks(xs), ranks(ys)).r;
-  const fit = pearson(xs, ys);
-  const per10 = -fit.slope * 10;   // endring i y når fyllingen er 10 pp lavere
-  const dir = rho < 0 ? 'lav fylling, høy pris' : 'lav fylling, lav pris';
+  const fill = pts.map(r => r.avvik);
+  const de   = pts.map(r => r[ref.field]);
+  const no   = pts.map(r => r.pris);
+  const lineFill = fitLine(fill, no);
+  const lineDE   = fitLine(de, no);
+  const rhoFill  = spearman(fill, no);
+  const rhoDE    = spearman(de, no);
+  const both     = fitTwo(fill, de, no);
 
   let nowFact = '';
   if (latest) {
-    const model = fit.intercept + fit.slope * latest.avvik;
-    const sign  = latest.avvik >= 0 ? '+' : '';
+    const model = both.a + both.b1 * latest.avvik + both.b2 * latest[ref.field];
     nowFact = `
       <div class="fact">
-        <div class="val">${fmtY(latest[yField])}</div>
-        <div class="lbl">Faktisk uke ${latest.iso_uke}, ${latest.iso_aar} (fylling ${sign}${latest.avvik.toFixed(1)} pp).
-          Trendlinjen tilsier ${fmtY(model)}.</div>
+        <div class="val">${latest.pris.toFixed(1)} €/MWh</div>
+        <div class="lbl">Faktisk uke ${latest.iso_uke}, ${latest.iso_aar}. Med fylling ${signed(latest.avvik, 1)} pp
+          og ${ref.name} ${latest[ref.field].toFixed(1)} €/MWh tilsier modellen ${model.toFixed(1)} €/MWh.</div>
       </div>`;
   }
 
   body.innerHTML = `
     <div class="facts">
       <div class="fact">
-        <div class="val">${strengthWord(rho)} (ρ = ${rho.toFixed(2)})</div>
-        <div class="lbl">Rangkorrelasjon, ${period.label}, ${pts.length} uker${Math.abs(rho) >= 0.2 ? ` · ${dir}` : ''}</div>
+        <div class="val">Fylling: ${strengthWord(rhoFill).toLowerCase()} (ρ = ${rhoFill.toFixed(2)})</div>
+        <div class="lbl">10 pp lavere fylling enn normalt: ${signed(-lineFill.slope * 10, 1)} €/MWh</div>
       </div>
       <div class="fact">
-        <div class="val">${per10 >= 0 ? '+' : '−'}${analysis.y === 'pct' ? `${Math.abs(per10).toFixed(0)} pp` : fmtY(Math.abs(per10))}</div>
-        <div class="lbl">Typisk prisforskjell når fyllingen er 10 pp lavere enn normalt</div>
+        <div class="val">${ref.label}: ${strengthWord(rhoDE).toLowerCase()} (ρ = ${rhoDE.toFixed(2)})</div>
+        <div class="lbl">10 €/MWh høyere ${ref.name}: ${signed(lineDE.slope * 10, 1)} €/MWh</div>
+      </div>
+      <div class="fact">
+        <div class="val">Sammen: forklarer ${Math.round(Math.max(0, both.r2) * 100)} %</div>
+        <div class="lbl">av prisvariasjonen (R²). Holdt hver for seg fast: 10 pp lavere fylling ${signed(-both.b1 * 10, 1)} €,
+          10 € høyere ${ref.name} ${signed(both.b2 * 10, 1)} €.</div>
       </div>
       ${nowFact}
     </div>
@@ -895,16 +929,44 @@ function renderAnalysis() {
       <span class="legend-item"><span class="legend-dot" style="background:#d97706"></span>${CURRENT_YEAR}</span>
       <span class="legend-item"><span class="legend-dashed"></span>Trendlinje</span>
     </div>
-    <div class="chart-wrap tall" style="margin-top:10px"><canvas id="scatter-canvas"></canvas></div>
+    <div class="chart-head" style="margin:14px 0 4px"><div class="title" style="font-size:.82rem">Norsk pris mot magasinfylling</div></div>
+    <div class="chart-wrap tall"><canvas id="scatter-fill"></canvas></div>
+    <div class="chart-head" style="margin:14px 0 4px">
+      <div class="title" style="font-size:.82rem">Norsk pris mot ${ref.name}</div>
+      <div class="sub">Prikker under den grå linjen: lavere pris i Norge enn i ${ref.country}</div>
+    </div>
+    <div class="chart-wrap tall"><canvas id="scatter-de"></canvas></div>
     <div class="note">
-      Vannrett akse: fyllingsgrad minus normalår (median ${CURRENT_YEAR - HIST_YEARS}–${CURRENT_YEAR - 1}) for samme uke.
-      ${analysis.y === 'pct'
-        ? 'Loddrett akse: norsk pris i prosent av tysk pris (DE-LU) samme uke – det fjerner mye av effekten av gass- og kullpriser. 100 % betyr lik pris.'
-        : 'Loddrett akse: ukesnitt av day-ahead-prisen. Prisnivået påvirkes også sterkt av gasspriser og prisene på kontinentet.'}
+      ρ er rangkorrelasjon (−1 til 1) for ${period.label}, ${pts.length} uker. Kronebeløpene er stigningstall fra lineær regresjon:
+      «hver for seg» ser på én variabel om gangen, «sammen» er en modell med begge, der effekten av den ene er justert for den andre.
+      Fylling er fyllingsgrad minus normalår (median ${CURRENT_YEAR - HIST_YEARS}–${CURRENT_YEAR - 1}) for samme uke; ${ref.desc}.
       Sammenheng betyr ikke årsak, og uker som følger etter hverandre er ikke uavhengige observasjoner.
     </div>`;
 
-  const toPt = r => ({ x: r.avvik, y: r[yField], row: r });
+  const minNo = Math.min(...no);
+  scatterCharts.push(drawScatter('scatter-fill', pts, latest, period, {
+    x: r => r.avvik,
+    xTitle: 'Fylling vs. normalår (pp)',
+    xTick: v => (v > 0 ? '+' : '') + v,
+    xLabel: r => `Fylling vs. normal: ${signed(r.avvik, 1)} pp`,
+    fit: lineFill,
+    zeroLine: 0,
+    yMin: minNo >= 0 ? 0 : undefined,
+  }));
+  scatterCharts.push(drawScatter('scatter-de', pts, latest, period, {
+    x: r => r[ref.field],
+    xTitle: `${ref.label} (€/MWh)`,
+    xTick: v => v,
+    xLabel: r => `${ref.label}: ${r[ref.field].toFixed(1)} €/MWh`,
+    fit: lineDE,
+    equalLine: true,
+    yMin: minNo >= 0 ? 0 : undefined,
+  }));
+}
+
+function drawScatter(canvasId, pts, latest, period, cfg) {
+  const toPt = r => ({ x: cfg.x(r), y: r.pris, row: r });
+  const xs = pts.map(cfg.x);
   const minX = Math.min(...xs), maxX = Math.max(...xs);
   const group = (label, filter, color, radius, order) => ({
     type: 'scatter',
@@ -917,23 +979,30 @@ function renderAnalysis() {
     pointHoverRadius: radius + 2,
     order,
   });
+  const line = (label, from, to, color, dash, order) => ({
+    type: 'line',
+    label,
+    data: [from, to],
+    borderColor: color,
+    borderWidth: 1.5,
+    borderDash: dash,
+    pointRadius: 0,
+    pointHoverRadius: 0,
+    order,
+  });
 
   const datasets = [
-    group('Tidligere år', r => r.iso_aar < CURRENT_YEAR - 1, '#b6bfcc', 3, 4),
-    group(`${CURRENT_YEAR - 1}`, r => r.iso_aar === CURRENT_YEAR - 1, '#0072b0', 3.5, 3),
-    group(`${CURRENT_YEAR}`, r => r.iso_aar === CURRENT_YEAR, '#d97706', 4, 2),
-    {
-      type: 'line',
-      label: 'Trendlinje',
-      data: [{ x: minX, y: fit.intercept + fit.slope * minX }, { x: maxX, y: fit.intercept + fit.slope * maxX }],
-      borderColor: '#6b7280',
-      borderWidth: 1.5,
-      borderDash: [5, 4],
-      pointRadius: 0,
-      pointHoverRadius: 0,
-      order: 1,
-    },
+    group('Tidligere år', r => r.iso_aar < CURRENT_YEAR - 1, '#b6bfcc', 3, 5),
+    group(`${CURRENT_YEAR - 1}`, r => r.iso_aar === CURRENT_YEAR - 1, '#0072b0', 3.5, 4),
+    group(`${CURRENT_YEAR}`, r => r.iso_aar === CURRENT_YEAR, '#d97706', 4, 3),
+    line('Trendlinje',
+         { x: minX, y: cfg.fit.intercept + cfg.fit.slope * minX },
+         { x: maxX, y: cfg.fit.intercept + cfg.fit.slope * maxX }, '#6b7280', [5, 4], 1),
   ];
+  if (cfg.equalLine) {
+    const lo = Math.max(0, minX);
+    datasets.push(line('Lik pris', { x: lo, y: lo }, { x: maxX, y: maxX }, '#d1d5db', [], 6));
+  }
   if (latest && period.test(latest.iso_aar)) {
     datasets.push({
       type: 'scatter',
@@ -948,8 +1017,7 @@ function renderAnalysis() {
     });
   }
 
-  if (scatterChart) { scatterChart.destroy(); scatterChart = null; }
-  scatterChart = new Chart(document.getElementById('scatter-canvas'), {
+  return new Chart(document.getElementById(canvasId), {
     data: { datasets },
     options: {
       responsive: true,
@@ -967,27 +1035,23 @@ function renderAnalysis() {
           filter: item => item.raw?.row,
           callbacks: {
             title: items => weekLabel(items[0].raw.row),
-            label: ctx => {
-              const r = ctx.raw.row;
-              const sign = r.avvik >= 0 ? '+' : '';
-              return [`Fylling vs. normal: ${sign}${r.avvik.toFixed(1)} pp`, `${yUnit === '€/MWh' ? 'Pris' : 'Pris vs. Tyskland'}: ${fmtY(r[yField])}`];
-            },
+            label: ctx => [cfg.xLabel(ctx.raw.row), `Norsk pris: ${ctx.raw.row.pris.toFixed(1)} €/MWh`],
           }
         }
       },
       scales: {
         x: {
           type: 'linear',
-          title: { display: true, text: 'Fylling vs. normalår (pp)', font: { size: 10 }, color: '#6b7280' },
-          ticks: { callback: v => (v > 0 ? '+' : '') + v, font: { size: 10 }, color: '#9ca3af', maxTicksLimit: 8 },
-          grid: { color: ctx => ctx.tick.value === 0 ? '#d1d5db' : '#f0f2f5' },
+          title: { display: true, text: cfg.xTitle, font: { size: 10 }, color: '#6b7280' },
+          ticks: { callback: cfg.xTick, font: { size: 10 }, color: '#9ca3af', maxTicksLimit: 8 },
+          grid: { color: ctx => ctx.tick.value === cfg.zeroLine ? '#d1d5db' : '#f0f2f5' },
           border: { display: false },
         },
         y: {
-          min: Math.min(...ys) >= 0 ? 0 : undefined,
-          title: { display: true, text: yUnit, font: { size: 10 }, color: '#6b7280' },
+          min: cfg.yMin,
+          title: { display: true, text: 'Norsk pris (€/MWh)', font: { size: 10 }, color: '#6b7280' },
           ticks: { font: { size: 10 }, color: '#9ca3af', maxTicksLimit: 6 },
-          grid: { color: ctx => analysis.y === 'pct' && ctx.tick.value === 100 ? '#d1d5db' : '#f0f2f5' },
+          grid: { color: '#f0f2f5' },
           border: { display: false },
         }
       }

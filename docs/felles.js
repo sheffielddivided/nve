@@ -134,7 +134,8 @@ function buildWeekTable(allData, priceData, key) {
   detectScale(rows);
   const normal = normalByWeek(rows);
   const pris   = priceMap(getPriceRows(priceData, key));
-  const prisDE = priceMap(priceData?.referanse?.['DE-LU'] ?? []);
+  const prisDE  = priceMap(priceData?.referanse?.['DE-LU'] ?? []);
+  const prisSE2 = priceMap(priceData?.referanse?.SE2 ?? []);
   return rows.map(r => {
     const k   = `${r.iso_aar}-${r.iso_uke}`;
     const pct = calcPct(r);
@@ -152,8 +153,7 @@ function buildWeekTable(allData, priceData, key) {
       avvik:   pct != null && nrm != null ? pct - nrm : null,
       pris:    p,
       prisDE:  de,
-      // Norsk pris i prosent av tysk; uinteressant når tysk pris er nær null eller negativ
-      prisPctDE: p != null && de != null && de > 5 ? (p / de) * 100 : null,
+      prisSE2: prisSE2.get(k) ?? null,
     };
   });
 }
