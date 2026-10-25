@@ -261,6 +261,8 @@
 <footer>
   Data: <a href="https://www.nve.no/energi/analyser-og-statistikk/magasinstatistikk/"
            target="_blank" rel="noopener">NVE Magasinstatistikk</a>
+  &nbsp;·&nbsp; Priser: <a href="https://transparency.entsoe.eu/"
+           target="_blank" rel="noopener">ENTSO-E</a>
   &nbsp;·&nbsp; Oppdateres ukentlig
 </footer>
 
@@ -268,6 +270,7 @@
 'use strict';
 
 const LOCAL_DATA   = 'data.json';
+const LOCAL_PRICES = 'prices.json';
 const API          = 'https://biapi.nve.no/magasinstatistikk/api/Magasinstatistikk/HentOffentligData';
 const CURRENT_YEAR = new Date().getFullYear();
 const HIST_YEARS   = 20;
@@ -316,6 +319,8 @@ let allData    = [];
 let activeKey  = 'LAND';
 let lineChart  = null;
 let donutChart = null;
+let priceChart = null;
+let priceData  = null;   // { enhet, omrader: { NO1: [{ iso_aar, iso_uke, pris, timer }] } }
 
 // ── Normalise fill percentage ─────────────────────────────────
 // API may return fyllingsgrad as fraction (0–1) or percent (0–100).
@@ -389,6 +394,50 @@ function buildChartData(rows) {
   };
 }
 
+// ── Prices (ENTSO-E day-ahead, ukesnitt) ──────────────────────
+// For «Norge» brukes et enkelt snitt av NO1–NO5 for uker der alle områdene har pris.
+function getPriceRows(key) {
+  const areas = priceData?.omrader;
+  if (!areas) return [];
+  if (areas[key]) return areas[key];
+  const names = Object.keys(areas);
+  const byWeek = {};
+  for (const n of names) {
+    for (const r of areas[n]) {
+      const k = `${r.iso_aar}-${r.iso_uke}`;
+      (byWeek[k] ??= { iso_aar: r.iso_aar, iso_uke: r.iso_uke, sum: 0, n: 0 });
+      byWeek[k].sum += r.pris;
+      byWeek[k].n++;
+    }
+  }
+  return Object.values(byWeek)
+    .filter(w => w.n === names.length)
+    .map(w => ({ iso_aar: w.iso_aar, iso_uke: w.iso_uke, pris: w.sum / w.n }))
+    .sort((a, b) => (a.iso_aar - b.iso_aar) || (a.iso_uke - b.iso_uke));
+}
+
+function buildPriceChartData(rows) {
+  const weeks = Array.from({ length: 52 }, (_, i) => i + 1);
+  const cur = {}, prev = {}, hist = {};
+  for (const r of rows) {
+    const w = r.iso_uke;
+    if (w < 1 || w > 52) continue;
+    if (r.iso_aar === CURRENT_YEAR) cur[w] = r.pris;
+    else {
+      if (r.iso_aar === CURRENT_YEAR - 1) prev[w] = r.pris;
+      if (r.iso_aar < CURRENT_YEAR) (hist[w] ??= []).push(r.pris);
+    }
+  }
+  const histYears = rows.filter(r => r.iso_aar < CURRENT_YEAR).map(r => r.iso_aar);
+  return {
+    weeks,
+    cur:  weeks.map(w => cur[w] ?? null),
+    prev: weeks.map(w => prev[w] ?? null),
+    med:  weeks.map(w => median(hist[w] ?? [])),
+    histFrom: histYears.length ? Math.min(...histYears) : null,
+  };
+}
+
 // ── Week label helper ─────────────────────────────────────────
 function weekLabel(r) {
   return `Uke ${r.iso_uke}, ${r.iso_aar}`;
@@ -445,6 +494,11 @@ function renderView() {
   const diffSign  = diffMedian >= 0 ? '+' : '';
   const diffClass = diffMedian >= 0 ? 'up' : 'down';
 
+  const priceRows  = getPriceRows(activeKey);
+  const priceNow   = priceRows.find(r => r.iso_aar === latest.iso_aar && r.iso_uke === latest.iso_uke);
+  const priceChartData = priceRows.length ? buildPriceChartData(priceRows) : null;
+  const priceName  = activeKey === 'LAND' ? 'Snitt NO1–NO5' : cfg.name;
+
   document.getElementById('main-content').innerHTML = `
 
     <div class="stat-card">
@@ -463,6 +517,7 @@ function renderView() {
           ${cap != null ? `<div class="pill"><div class="val">${cap.toFixed(1)} TWh</div><div class="lbl">Kapasitet</div></div>` : ''}
           ${deltaDisplay != null ? `<div class="pill ${deltaClass}"><div class="val">${deltaSign}${deltaDisplay.toFixed(1)} pp</div><div class="lbl">Fra forrige uke</div></div>` : ''}
           ${diffMedian != null ? `<div class="pill ${diffClass}"><div class="val">${diffSign}${diffMedian.toFixed(1)} pp</div><div class="lbl">vs. normalår</div></div>` : ''}
+          ${priceNow ? `<div class="pill"><div class="val">${priceNow.pris.toFixed(1)} €</div><div class="lbl">Pris per MWh</div></div>` : ''}
         </div>
       </div>
       <div class="map-wrap">${norwayMapSVG(activeKey)}</div>
@@ -491,10 +546,36 @@ function renderView() {
         <canvas id="line-canvas"></canvas>
       </div>
     </div>
+
+    ${priceChartData ? `
+    <div class="chart-card">
+      <div class="chart-head">
+        <div class="title">Strømpris ${CURRENT_YEAR} (ukesnitt)</div>
+        <div class="sub">${priceName} · day-ahead, ${priceData.enhet}</div>
+        <div class="legend">
+          <span class="legend-item">
+            <span class="legend-line" style="background:#d97706"></span>
+            ${CURRENT_YEAR}
+          </span>
+          <span class="legend-item">
+            <span class="legend-line" style="background:#9ca3af;height:2px"></span>
+            ${CURRENT_YEAR - 1}
+          </span>
+          <span class="legend-item">
+            <span class="legend-dashed"></span>
+            Median ${priceChartData.histFrom}–${CURRENT_YEAR - 1}
+          </span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="price-canvas"></canvas>
+      </div>
+    </div>` : ''}
   `;
 
   drawDonut(pct);
   drawYearChart(chartData);
+  drawPriceChart(priceChartData);
 }
 
 // ── Donut gauge ───────────────────────────────────────────────
@@ -648,6 +729,91 @@ function drawYearChart({ weeks, cur, med, min, max }) {
   });
 }
 
+// ── Price chart (Jan–Des, inneværende år + fjoråret + median) ─
+function drawPriceChart(data) {
+  if (priceChart) { priceChart.destroy(); priceChart = null; }
+  const canvas = document.getElementById('price-canvas');
+  if (!canvas || !data) return;
+
+  const { weeks, cur, prev, med, histFrom } = data;
+  const line = (label, values, color, extra) => ({
+    label,
+    data: values,
+    borderColor: color,
+    backgroundColor: 'transparent',
+    fill: false,
+    pointRadius: 0,
+    spanGaps: true,
+    ...extra,
+  });
+
+  priceChart = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: weeks.map(w => MONTH_LABEL[w] ?? ''),
+      datasets: [
+        line(`Median ${histFrom}–${CURRENT_YEAR - 1}`, med, '#9ca3af',
+             { borderWidth: 1.5, borderDash: [5, 4], order: 3 }),
+        line(`${CURRENT_YEAR - 1}`, prev, '#9ca3af', { borderWidth: 1.5, order: 2 }),
+        line(`${CURRENT_YEAR}`, cur, '#d97706', {
+          borderWidth: 2.5,
+          pointHoverRadius: 5,
+          pointHoverBackgroundColor: '#d97706',
+          spanGaps: false,
+          order: 1,
+        }),
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#fff',
+          titleColor: '#111',
+          bodyColor: '#444',
+          borderColor: '#e5e7eb',
+          borderWidth: 1,
+          padding: 10,
+          callbacks: {
+            title: items => `Uke ${weeks[items[0].dataIndex]}`,
+            label: ctx => {
+              const v = ctx.parsed.y;
+              if (v == null) return null;
+              return `${ctx.dataset.label}: ${v.toFixed(1)} €/MWh`;
+            },
+          }
+        }
+      },
+      scales: {
+        x: {
+          ticks: {
+            maxRotation: 0,
+            autoSkip: false,
+            font: { size: 10 },
+            color: '#9ca3af',
+          },
+          grid: { display: false },
+          border: { display: false },
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: v => v + ' €',
+            font: { size: 10 },
+            color: '#9ca3af',
+            maxTicksLimit: 6,
+          },
+          grid: { color: '#f0f2f5' },
+          border: { dash: [3, 3], display: false },
+        }
+      }
+    }
+  });
+}
+
 // ── Auto-detect total-Norway aggregation ──────────────────────
 // After data is loaded, find the (omrType, omrnr) pair outside the
 // five EL price areas that has the most rows. That pair is the true
@@ -678,7 +844,20 @@ async function fetchData(url) {
   return data;
 }
 
+// Prisene er valgfrie: mangler fila, vises siden uten prisgraf.
+async function fetchPrices() {
+  try {
+    const res = await fetch(LOCAL_PRICES);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.omrader ? data : null;
+  } catch {
+    return null;
+  }
+}
+
 async function init() {
+  const pricesPromise = fetchPrices();
   try {
     try {
       allData = await fetchData(LOCAL_DATA);
@@ -687,6 +866,7 @@ async function init() {
       allData = await fetchData(API);
     }
     detectLandFilter();
+    priceData = await pricesPromise;
     renderTabs();
     renderView();
   } catch (err) {

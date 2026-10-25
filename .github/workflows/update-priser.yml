@@ -1,0 +1,51 @@
+name: Oppdater strømpriser
+
+on:
+  schedule:
+    # Day-ahead-prisene for neste døgn publiseres rundt kl. 13 norsk tid.
+    # Kjører daglig etter dette, slik at inneværende uke er oppdatert.
+    - cron: '43 13 * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: 'Hent hele historikken på nytt (fra 2015)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: oppdater-priser
+  cancel-in-progress: false
+
+jobs:
+  update-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Sjekk ut repo
+        uses: actions/checkout@v4
+
+      - name: Hent priser fra ENTSO-E
+        env:
+          ENTSOE_TOKEN: ${{ secrets.ENTSOE_TOKEN }}
+        run: |
+          if [ "${{ inputs.full }}" = "true" ]; then
+            python3 scripts/hent_priser.py --full
+          else
+            python3 scripts/hent_priser.py
+          fi
+
+      - name: Commit og push hvis prisene er endret
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add docs/prices.json
+          if git diff --cached --quiet; then
+            echo "Ingen endringer i prisene."
+            exit 0
+          fi
+          git commit -m "Oppdater strømpriser $(date -u +%Y-%m-%d)"
+          # Magasin-workflowen kan ha pushet i mellomtiden
+          git pull --rebase origin "${GITHUB_REF_NAME}"
+          git push
