@@ -338,9 +338,9 @@ let activeKey  = 'LAND';
 let lineChart  = null;
 let donutChart = null;
 let priceChart = null;
-let priceData  = null;   // { enhet, omrader: { NO1: [...] }, referanse: { 'DE-LU': [...] } }
+let priceData  = null;   // { enhet, omrader: { NO1: [...] }, referanse: { 'DE-LU': [...], SE2: [...] } }
 let scatterCharts = [];
-const analysis = { period: 'alle' };
+const analysis = { period: 'alle', ref: null };   // ref null = standard for området
 
 // ── Build per-week chart data ─────────────────────────────────
 function buildChartData(rows) {
@@ -406,6 +406,7 @@ function renderTabs() {
 
 function switchRegion(key) {
   activeKey = key;
+  analysis.ref = null;
   renderTabs();
   renderView();
 }
@@ -528,9 +529,13 @@ function renderView() {
     <div class="chart-card">
       <div class="chart-head">
         <div class="title">Analyse: hva henger prisen sammen med?</div>
-        <div class="sub">${priceName} · norsk pris mot magasinfylling og tysk pris · én prikk per uke</div>
+        <div class="sub">${priceName} · norsk pris mot magasinfylling og utenlandsk pris · én prikk per uke</div>
       </div>
       <div class="seg-row">
+        <div class="seg" id="seg-ref">
+          <button data-v="DE">Mot Tyskland</button>
+          <button data-v="SE2">Mot Sverige (SE2)</button>
+        </div>
         <div class="seg" id="seg-period">
           <button data-v="alle">Alle år</button>
           <button data-v="tidlig">2015–2020</button>
@@ -545,12 +550,14 @@ function renderView() {
   drawYearChart(chartData);
   drawPriceChart(priceChartData);
   if (priceChartData) {
-    document.getElementById('seg-period').onclick = e => {
-      const v = e.target.dataset?.v;
-      if (!v) return;
-      analysis.period = v;
-      renderAnalysis();
-    };
+    for (const [id, field] of [['seg-ref', 'ref'], ['seg-period', 'period']]) {
+      document.getElementById(id).onclick = e => {
+        const v = e.target.dataset?.v;
+        if (!v) return;
+        analysis[field] = v;
+        renderAnalysis();
+      };
+    }
     renderAnalysis();
   }
 }
@@ -791,7 +798,7 @@ function drawPriceChart(data) {
   });
 }
 
-// ── Analyse: norsk pris mot magasinfylling og tysk pris ───────
+// ── Analyse: norsk pris mot magasinfylling og utenlandsk pris ─
 const PERIODS = {
   alle:   { label: 'alle år',   test: y => true },
   tidlig: { label: '2015–2020', test: y => y <= 2020 },
@@ -847,15 +854,26 @@ function strengthWord(rho) {
   return a < 0.2 ? 'Ingen tydelig' : a < 0.4 ? 'Svak' : a < 0.6 ? 'Moderat' : 'Sterk';
 }
 
+// Utenlandsk referansepris. NO3 og NO4 henger tettere sammen med Sverige enn med Tyskland.
+const REFS = {
+  DE:  { field: 'prisDE',  name: 'tysk pris',  label: 'Tysk pris',  country: 'Tyskland',
+         desc: 'tysk pris er DE-LU (DE-AT-LU før oktober 2018)' },
+  SE2: { field: 'prisSE2', name: 'svensk pris', label: 'Svensk pris (SE2)', country: 'Sverige (SE2)',
+         desc: 'svensk pris er budområde SE2 (Sundsvall)' },
+};
+const defaultRef = key => (key === 'NO3' || key === 'NO4') ? 'SE2' : 'DE';
+
 const signed = (v, digits) => `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(digits)}`;
 
 function renderAnalysis() {
-  for (const b of document.querySelectorAll('#seg-period button')) {
-    b.classList.toggle('active', b.dataset.v === analysis.period);
+  const refKey = analysis.ref ?? defaultRef(activeKey);
+  const ref    = REFS[refKey];
+  for (const [id, v] of [['seg-ref', refKey], ['seg-period', analysis.period]]) {
+    for (const b of document.querySelectorAll(`#${id} button`)) b.classList.toggle('active', b.dataset.v === v);
   }
   const period = PERIODS[analysis.period];
   const usable = buildWeekTable(allData, priceData, activeKey)
-    .filter(r => r.avvik != null && r.pris != null && r.prisDE != null);
+    .filter(r => r.avvik != null && r.pris != null && r[ref.field] != null);
   const pts    = usable.filter(r => period.test(r.iso_aar));
   const latest = usable[usable.length - 1];
   const body   = document.getElementById('analysis-body');
@@ -864,12 +882,12 @@ function renderAnalysis() {
   scatterCharts = [];
 
   if (pts.length < 20) {
-    body.innerHTML = `<div class="note">For få uker med fylling, norsk og tysk pris til å si noe om sammenhengen.</div>`;
+    body.innerHTML = `<div class="note">For få uker med fylling, norsk og ${ref.name} til å si noe om sammenhengen.</div>`;
     return;
   }
 
   const fill = pts.map(r => r.avvik);
-  const de   = pts.map(r => r.prisDE);
+  const de   = pts.map(r => r[ref.field]);
   const no   = pts.map(r => r.pris);
   const lineFill = fitLine(fill, no);
   const lineDE   = fitLine(de, no);
@@ -879,12 +897,12 @@ function renderAnalysis() {
 
   let nowFact = '';
   if (latest) {
-    const model = both.a + both.b1 * latest.avvik + both.b2 * latest.prisDE;
+    const model = both.a + both.b1 * latest.avvik + both.b2 * latest[ref.field];
     nowFact = `
       <div class="fact">
         <div class="val">${latest.pris.toFixed(1)} €/MWh</div>
         <div class="lbl">Faktisk uke ${latest.iso_uke}, ${latest.iso_aar}. Med fylling ${signed(latest.avvik, 1)} pp
-          og tysk pris ${latest.prisDE.toFixed(1)} €/MWh tilsier modellen ${model.toFixed(1)} €/MWh.</div>
+          og ${ref.name} ${latest[ref.field].toFixed(1)} €/MWh tilsier modellen ${model.toFixed(1)} €/MWh.</div>
       </div>`;
   }
 
@@ -895,13 +913,13 @@ function renderAnalysis() {
         <div class="lbl">10 pp lavere fylling enn normalt: ${signed(-lineFill.slope * 10, 1)} €/MWh</div>
       </div>
       <div class="fact">
-        <div class="val">Tysk pris: ${strengthWord(rhoDE).toLowerCase()} (ρ = ${rhoDE.toFixed(2)})</div>
-        <div class="lbl">10 €/MWh høyere tysk pris: ${signed(lineDE.slope * 10, 1)} €/MWh</div>
+        <div class="val">${ref.label}: ${strengthWord(rhoDE).toLowerCase()} (ρ = ${rhoDE.toFixed(2)})</div>
+        <div class="lbl">10 €/MWh høyere ${ref.name}: ${signed(lineDE.slope * 10, 1)} €/MWh</div>
       </div>
       <div class="fact">
         <div class="val">Sammen: forklarer ${Math.round(Math.max(0, both.r2) * 100)} %</div>
         <div class="lbl">av prisvariasjonen (R²). Holdt hver for seg fast: 10 pp lavere fylling ${signed(-both.b1 * 10, 1)} €,
-          10 € høyere tysk pris ${signed(both.b2 * 10, 1)} €.</div>
+          10 € høyere ${ref.name} ${signed(both.b2 * 10, 1)} €.</div>
       </div>
       ${nowFact}
     </div>
@@ -914,15 +932,15 @@ function renderAnalysis() {
     <div class="chart-head" style="margin:14px 0 4px"><div class="title" style="font-size:.82rem">Norsk pris mot magasinfylling</div></div>
     <div class="chart-wrap tall"><canvas id="scatter-fill"></canvas></div>
     <div class="chart-head" style="margin:14px 0 4px">
-      <div class="title" style="font-size:.82rem">Norsk pris mot tysk pris</div>
-      <div class="sub">Prikker under den grå linjen: lavere pris i Norge enn i Tyskland</div>
+      <div class="title" style="font-size:.82rem">Norsk pris mot ${ref.name}</div>
+      <div class="sub">Prikker under den grå linjen: lavere pris i Norge enn i ${ref.country}</div>
     </div>
     <div class="chart-wrap tall"><canvas id="scatter-de"></canvas></div>
     <div class="note">
       ρ er rangkorrelasjon (−1 til 1) for ${period.label}, ${pts.length} uker. Kronebeløpene er stigningstall fra lineær regresjon:
       «hver for seg» ser på én variabel om gangen, «sammen» er en modell med begge, der effekten av den ene er justert for den andre.
-      Fylling er fyllingsgrad minus normalår (median ${CURRENT_YEAR - HIST_YEARS}–${CURRENT_YEAR - 1}) for samme uke; tysk pris er DE-LU
-      (DE-AT-LU før oktober 2018). Sammenheng betyr ikke årsak, og uker som følger etter hverandre er ikke uavhengige observasjoner.
+      Fylling er fyllingsgrad minus normalår (median ${CURRENT_YEAR - HIST_YEARS}–${CURRENT_YEAR - 1}) for samme uke; ${ref.desc}.
+      Sammenheng betyr ikke årsak, og uker som følger etter hverandre er ikke uavhengige observasjoner.
     </div>`;
 
   const minNo = Math.min(...no);
@@ -936,10 +954,10 @@ function renderAnalysis() {
     yMin: minNo >= 0 ? 0 : undefined,
   }));
   scatterCharts.push(drawScatter('scatter-de', pts, latest, period, {
-    x: r => r.prisDE,
-    xTitle: 'Tysk pris (€/MWh)',
+    x: r => r[ref.field],
+    xTitle: `${ref.label} (€/MWh)`,
     xTick: v => v,
-    xLabel: r => `Tysk pris: ${r.prisDE.toFixed(1)} €/MWh`,
+    xLabel: r => `${ref.label}: ${r[ref.field].toFixed(1)} €/MWh`,
     fit: lineDE,
     equalLine: true,
     yMin: minNo >= 0 ? 0 : undefined,

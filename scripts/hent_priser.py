@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hent day-ahead-områdepriser for NO1–NO5 og DE-LU fra ENTSO-E og lagre ukesnitt.
+"""Hent day-ahead-områdepriser for NO1–NO5, DE-LU og SE2 fra ENTSO-E og lagre ukesnitt.
 
 Skriptet henter dokumenttype A44 (day-ahead-priser) fra ENTSO-E Transparency
 Platform, regner ut tidsvektet snitt per ISO-uke (norsk tid, samme ukeinndeling
@@ -40,13 +40,14 @@ AREAS = {
     'NO5': '10Y1001A1001A48H',
 }
 
-# Referansepris for analysen. Tyskland, Østerrike og Luxembourg var ett budområde
+# Referansepriser for analysen. Tyskland, Østerrike og Luxembourg var ett budområde
 # fram til 1. oktober 2018; deretter DE-LU. Hver kode gjelder fra og med datoen.
 REFERENCE = {
     'DE-LU': [
         ('10Y1001A1001A63L', date.min),                  # DE-AT-LU
         ('10Y1001A1001A82H', date(2018, 10, 1)),        # DE-LU
     ],
+    'SE2': [('10Y1001A1001A45N', date.min)],
 }
 
 

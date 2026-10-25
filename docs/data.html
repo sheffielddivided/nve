@@ -255,6 +255,7 @@ function valueColumns() {
       ...REGIONS.map(r => ({ key: `pct_${r.key}`, label: `Fylling ${r.label}`, unit: '%', digits: 1 })),
       ...PRICE_AREAS.map(a => ({ key: `pris_${a}`, label: `Pris ${a}`, unit: '€/MWh', digits: 2 })),
       { key: 'prisDE', label: 'Pris DE-LU', unit: '€/MWh', digits: 2 },
+      { key: 'prisSE2', label: 'Pris SE2', unit: '€/MWh', digits: 2 },
     ];
   }
   return [
@@ -265,6 +266,7 @@ function valueColumns() {
     { key: 'avvik',   label: 'Avvik normalår',  unit: 'pp',    digits: 1 },
     { key: 'pris',    label: state.key === 'LAND' ? 'Pris snitt NO1–NO5' : 'Pris', unit: '€/MWh', digits: 2 },
     { key: 'prisDE',  label: 'Pris DE-LU',      unit: '€/MWh', digits: 2 },
+    { key: 'prisSE2', label: 'Pris SE2',        unit: '€/MWh', digits: 2 },
   ];
 }
 
@@ -287,7 +289,7 @@ function weeklyRows() {
   for (const r of REGIONS) {
     for (const w of weekTable(r.key)) {
       const k = `${w.iso_aar}-${w.iso_uke}`;
-      const row = byWeek.get(k) ?? { iso_aar: w.iso_aar, iso_uke: w.iso_uke, dato: w.dato, prisDE: w.prisDE };
+      const row = byWeek.get(k) ?? { iso_aar: w.iso_aar, iso_uke: w.iso_uke, dato: w.dato, prisDE: w.prisDE, prisSE2: w.prisSE2 };
       row[`pct_${r.key}`] = w.pct;
       if (r.key !== 'LAND') row[`pris_${r.key}`] = w.pris;
       byWeek.set(k, row);
@@ -430,6 +432,7 @@ function aboutSheet() {
     ['Avvik normalår', `Prosentpoeng fra median for samme uke ${CURRENT_YEAR - HIST_YEARS}–${CURRENT_YEAR - 1}`],
     ['Pris', 'Tidsvektet ukesnitt av day-ahead-pris, EUR/MWh. «Norge» = enkelt snitt av NO1–NO5'],
     ['Pris DE-LU', 'Tysk budområde (DE-AT-LU før oktober 2018), EUR/MWh'],
+    ['Pris SE2', 'Svensk budområde SE2 (Sundsvall), EUR/MWh'],
     ['Uker', 'ISO-uker i norsk tid. Siste uke kan være ufullstendig'],
   ];
 }
