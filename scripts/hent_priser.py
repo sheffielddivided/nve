@@ -52,13 +52,17 @@ REFERENCE = {
 
 
 # ── HTTP ─────────────────────────────────────────────────────
-def fetch_xml(token, eic, start, end):
-    """Hent rå XML for ett område og én periode (maks ett år)."""
+def fetch_xml(token, eic, start, end, document_type='A44', out_eic=None):
+    """Hent rå XML for én periode (maks ett år).
+
+    For priser (A44) er inn- og ut-område det samme. For fysisk flyt (A11) er
+    eic mottakende område og out_eic sendende område.
+    """
     params = {
         'securityToken': token,
-        'documentType': 'A44',
+        'documentType': document_type,
         'in_Domain': eic,
-        'out_Domain': eic,
+        'out_Domain': out_eic or eic,
         'periodStart': start.strftime('%Y%m%d%H%M'),
         'periodEnd': end.strftime('%Y%m%d%H%M'),
     }
@@ -135,7 +139,10 @@ def parse_periods(xml_bytes):
             n = int((end - start).total_seconds() // 60 // res)
             by_pos = {}
             for p in children(period, 'Point'):
-                by_pos[int(child(p, 'position').text)] = float(child(p, 'price.amount').text)
+                value = child(p, 'price.amount')
+                if value is None:
+                    value = child(p, 'quantity')   # flyt (A11) oppgis som quantity
+                by_pos[int(child(p, 'position').text)] = float(value.text)
             prices, last = [], None
             for pos in range(1, n + 1):
                 last = by_pos.get(pos, last)
@@ -184,8 +191,11 @@ def oslo_midnight_utc(d):
     return datetime.combine(d, datetime.min.time(), OSLO).astimezone(timezone.utc)
 
 
-def fetch_area(token, segments, from_day):
-    """Hent ukesnitt fra from_day. segments: [(eic, gyldig_fra)], sortert på dato."""
+def fetch_area(token, segments, from_day, **kw):
+    """Hent ukesnitt fra from_day. segments: [(eic, gyldig_fra)], sortert på dato.
+
+    Øvrige argumenter sendes videre til fetch_xml.
+    """
     stop = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(days=2)
     periods = []
     for i, (eic, valid_from) in enumerate(segments):
@@ -193,27 +203,33 @@ def fetch_area(token, segments, from_day):
         seg_stop = oslo_midnight_utc(segments[i + 1][1]) if i + 1 < len(segments) else stop
         while start < seg_stop:
             end = min(start + timedelta(days=365), seg_stop)
-            periods += parse_periods(fetch_xml(token, eic, start, end))
+            periods += parse_periods(fetch_xml(token, eic, start, end, **kw))
             start = end
     return weekly_averages(periods)
 
 
-def update_series(token, name, segments, old_rows, from_day):
-    """Hent én serie og flett med eldre uker fra eksisterende fil."""
+def update_series(token, name, segments, old_rows, from_day, value_key='pris', required=True, **kw):
+    """Hent én serie og flett med eldre uker fra eksisterende fil.
+
+    Får vi ingen data og serien ikke er påkrevd, beholdes de gamle radene.
+    """
     if old_rows is None:
         from_day = monday_of_week_containing(date(FIRST_YEAR, 1, 1))
     from_key = tuple(from_day.isocalendar()[:2])
     print(f'Henter {name} fra {from_day}…', flush=True)
-    weeks = fetch_area(token, segments, from_day)
+    weeks = fetch_area(token, segments, from_day, **kw)
     if not weeks:
-        sys.exit(f'Fikk ingen priser for {name}; beholder eksisterende fil.')
+        if required:
+            sys.exit(f'Fikk ingen data for {name}; beholder eksisterende fil.')
+        print(f'  Ingen data for {name}; beholder eventuelle eldre uker.', flush=True)
+        return old_rows or []
     for r in old_rows or []:
         key = (r['iso_aar'], r['iso_uke'])
         if key < from_key:
-            weeks.setdefault(key, (r['pris'], r['timer']))
+            weeks.setdefault(key, (r[value_key], r['timer']))
     return [
-        {'iso_aar': y, 'iso_uke': w, 'pris': round(p, 2), 'timer': round(h, 2)}
-        for (y, w), (p, h) in sorted(weeks.items())
+        {'iso_aar': y, 'iso_uke': w, value_key: round(v, 2), 'timer': round(h, 2)}
+        for (y, w), (v, h) in sorted(weeks.items())
     ]
 
 

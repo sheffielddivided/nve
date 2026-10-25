@@ -31,16 +31,19 @@
       background: var(--navy);
       color: #fff;
       padding: 14px 16px 12px;
+    }
+    /* Header og områdefaner ligger fast øverst når man scroller */
+    .topbar {
       position: sticky;
       top: 0;
       z-index: 20;
-      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
     }
-    .header-inner { display: flex; align-items: center; gap: 10px; max-width: 1100px; margin: 0 auto; }
+    .header-inner { display: flex; align-items: center; gap: 10px; max-width: 1280px; margin: 0 auto; }
     header h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
     header p  { font-size: .72rem; opacity: .75; margin-top: 2px; }
+    .hdr-nav { margin-left: auto; display: flex; gap: 6px; }
     .hdr-link {
-      margin-left: auto;
       color: #fff;
       font-size: .78rem;
       font-weight: 600;
@@ -50,6 +53,11 @@
       padding: 6px 10px;
       white-space: nowrap;
     }
+    .hdr-link.active { background: rgba(255,255,255,.18); }
+    @media (max-width: 480px) {
+      .hdr-nav { gap: 4px; }
+      .hdr-link { padding: 5px 7px; font-size: .72rem; }
+    }
 
     /* ── Region tabs ── */
     .tabs-bar {
@@ -58,7 +66,7 @@
       display: flex;
       overflow-x: auto;
       scrollbar-width: none;
-      padding: 0 8px;
+      padding: 0 max(8px, calc((100% - 1280px) / 2));
       gap: 2px;
     }
     .tabs-bar::-webkit-scrollbar { display: none; }
@@ -77,7 +85,7 @@
     .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
     .tab:hover:not(.active) { color: var(--text); }
 
-    .page { padding: 16px; max-width: 1100px; margin: 0 auto; }
+    .page { padding: 16px; max-width: 1280px; margin: 0 auto; }
     .card {
       background: var(--card);
       border-radius: 14px;
@@ -177,16 +185,22 @@
   </style>
 </head>
 <body>
+<div class="topbar">
 <header>
   <div class="header-inner">
     <div>
       <h1>Magasin og pris – data</h1>
       <p id="hdr-sub">Laster data…</p>
     </div>
-    <a class="hdr-link" href="index.html">← Oversikt</a>
+    <nav class="hdr-nav">
+      <a class="hdr-link" href="index.html">Oversikt</a>
+      <a class="hdr-link active" href="data.html">Data</a>
+      <a class="hdr-link" href="utforsk.html">Utforsk</a>
+    </nav>
   </div>
 </header>
 <div class="tabs-bar" id="tabs-bar"></div>
+</div>
 <div class="page">
   <div class="card">
     <div class="controls">

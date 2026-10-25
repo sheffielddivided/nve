@@ -191,6 +191,51 @@ async function fetchPrices() {
   }
 }
 
+// ── Utvekslingsflyt (ENTSO-E A11, ukesnitt i MW) ──────────────
+const LOCAL_FLOWS = 'flows.json';
+const FLOW_COUNTRY = {
+  SE1: 'Sverige', SE2: 'Sverige', SE3: 'Sverige', FI: 'Finland', DK1: 'Danmark',
+  NL: 'Nederland', 'DE-LU': 'Tyskland', GB: 'Storbritannia',
+};
+
+async function fetchFlows() {
+  try {
+    const res = await fetch(LOCAL_FLOWS);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.serier ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+// Netto eksport per uke for et område (positiv = eksport fra Norge), totalt og per land.
+// Returnerer null hvis området ikke har utenlandsforbindelser.
+function flowByWeek(flowData, key) {
+  const borders = (flowData?.forbindelser ?? []).filter(b => key === 'LAND' || b.norsk === key);
+  if (!borders.length) return null;
+  const out = new Map();
+  for (const b of borders) {
+    const ut  = priceMapBy(flowData.serier[`${b.norsk}>${b.utland}`], 'mw');
+    const inn = priceMapBy(flowData.serier[`${b.utland}>${b.norsk}`], 'mw');
+    const country = FLOW_COUNTRY[b.utland] ?? b.utland;
+    for (const k of new Set([...ut.keys(), ...inn.keys()])) {
+      const net = (ut.get(k) ?? 0) - (inn.get(k) ?? 0);
+      const w = out.get(k) ?? { netto: 0, land: {} };
+      w.netto += net;
+      w.land[country] = (w.land[country] ?? 0) + net;
+      out.set(k, w);
+    }
+  }
+  return out;
+}
+
+function priceMapBy(rows, field) {
+  const m = new Map();
+  for (const r of rows ?? []) m.set(`${r.iso_aar}-${r.iso_uke}`, r[field]);
+  return m;
+}
+
 function weekLabel(r) {
   return `Uke ${r.iso_uke}, ${r.iso_aar}`;
 }

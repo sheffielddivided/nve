@@ -10,3 +10,7 @@ repo-secreten `ENTSOE_TOKEN`. Kjør den manuelt med «full» avkrysset for å he
 historikken på nytt.
 
 `docs/data.html` viser fylling og priser i tabell per område, med nedlasting til Excel og CSV.
+
+`docs/utforsk.html` er et analyseverktøy (ECharts) med tidslinje, sesongvisning og sammenhengsdiagram
+for fylling, priser og utvekslingsflyt. Utvekslingsflyten hentes av `scripts/hent_flyt.py` til
+`docs/flows.json` i samme workflow som prisene.

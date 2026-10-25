@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="no">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Utforsk magasin og pris</title>
+  <meta name="theme-color" content="#004890">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js"></script>
+  <style>
+    :root {
+      --navy:  #004890;
+      --blue:  #0072b0;
+      --tint:  #e6f0f8;
+      --text:  #111827;
+      --sub:   #6b7280;
+      --border:#e5e7eb;
+      --bg:    #f4f7fb;
+      --card:  #ffffff;
+      --page-w: 1280px;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100dvh;
+    }
+
+    /* ── Header og faner (fast øverst) ── */
+    .topbar { position: sticky; top: 0; z-index: 20; box-shadow: 0 2px 8px rgba(0,0,0,.15); }
+    header { background: var(--navy); color: #fff; padding: 14px 16px 12px; }
+    .header-inner { display: flex; align-items: center; gap: 10px; max-width: var(--page-w); margin: 0 auto; }
+    header h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
+    header p  { font-size: .72rem; opacity: .75; margin-top: 2px; }
+    .hdr-nav { margin-left: auto; display: flex; gap: 6px; }
+    .hdr-link {
+      color: #fff;
+      font-size: .78rem;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,.4);
+      border-radius: 8px;
+      padding: 6px 10px;
+      white-space: nowrap;
+    }
+    .hdr-link.active { background: rgba(255,255,255,.18); }
+    .tabs-bar {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      overflow-x: auto;
+      scrollbar-width: none;
+      padding: 0 max(8px, calc((100% - var(--page-w)) / 2));
+      gap: 2px;
+    }
+    .tabs-bar::-webkit-scrollbar { display: none; }
+    .tab {
+      flex-shrink: 0;
+      padding: 11px 13px;
+      font-size: .82rem;
+      font-weight: 500;
+      color: var(--sub);
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    /* ── Layout ── */
+    .page { padding: 16px; max-width: var(--page-w); margin: 0 auto; }
+    .card {
+      background: var(--card);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.08);
+      margin-bottom: 14px;
+      min-width: 0;
+    }
+    .card-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 10px; }
+    .card-head .title { font-size: .9rem; font-weight: 700; }
+    .card-head .sub   { font-size: .73rem; color: var(--sub); margin-top: 2px; }
+    .card-head .actions { margin-left: auto; display: flex; gap: 6px; flex-shrink: 0; }
+
+    /* ── Controls ── */
+    .controls { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: flex-end; }
+    .control > label, .control > .lbl { display: block; font-size: .68rem; color: var(--sub); margin-bottom: 4px; }
+    .seg { display: inline-flex; flex-wrap: wrap; background: var(--tint); border-radius: 8px; padding: 2px; }
+    .seg button {
+      border: none;
+      background: none;
+      font: inherit;
+      font-size: .76rem;
+      color: var(--sub);
+      padding: 6px 9px;
+      border-radius: 6px;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+    .seg button.active { background: var(--card); color: var(--navy); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    select {
+      font: inherit;
+      font-size: .8rem;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--card);
+      color: var(--text);
+      max-width: 100%;
+    }
+    .btn {
+      font: inherit;
+      font-size: .74rem;
+      font-weight: 600;
+      border-radius: 8px;
+      padding: 6px 10px;
+      cursor: pointer;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--blue);
+      white-space: nowrap;
+    }
+    .btn:hover { border-color: var(--blue); }
+    .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); align-items: center; }
+    .presets .lbl { font-size: .7rem; color: var(--sub); margin-right: 4px; }
+    .chip {
+      font: inherit;
+      font-size: .74rem;
+      border: 1px solid var(--border);
+      background: var(--card);
+      color: var(--text);
+      border-radius: 999px;
+      padding: 5px 11px;
+      cursor: pointer;
+    }
+    .chip:hover { border-color: var(--blue); color: var(--blue); }
+    .chip.on { background: var(--tint); border-color: var(--blue); color: var(--navy); font-weight: 600; }
+    .chip .sw { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; vertical-align: 1px; }
+
+    /* ── Oppsummering ── */
+    .summary { font-size: .84rem; line-height: 1.55; }
+    .summary strong { color: var(--navy); }
+    .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; margin-top: 10px; }
+    .fact { background: var(--tint); border-radius: 8px; padding: 8px 10px; }
+    .fact .val { font-size: .95rem; font-weight: 700; color: var(--navy); }
+    .fact .lbl { font-size: .68rem; color: var(--sub); margin-top: 2px; }
+
+    /* ── Visninger ── */
+    .view-tabs { margin-bottom: 12px; }
+    .view-tabs .seg { width: 100%; }
+    .view-tabs .seg button { flex: 1; padding: 8px 6px; font-size: .8rem; }
+    .view { display: none; }
+    .view.shown { display: block; }
+    .chart { width: 100%; }
+    #chart-time { height: 680px; }
+    #chart-season, #chart-scatter { height: 380px; }
+    .sub-controls { display: flex; flex-wrap: wrap; gap: 10px 14px; align-items: flex-end; margin-bottom: 10px; }
+    .years { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+    .stats { font-size: .74rem; color: var(--sub); margin-bottom: 8px; min-height: 1.2em; }
+    .stats strong { color: var(--text); }
+    .note { font-size: .7rem; color: var(--sub); line-height: 1.5; margin-top: 8px; }
+    .error-box {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      border-radius: 10px;
+      padding: 16px;
+      color: #b91c1c;
+      font-size: .83rem;
+    }
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      transform: translateX(-50%);
+      background: #111827;
+      color: #fff;
+      font-size: .8rem;
+      padding: 8px 14px;
+      border-radius: 8px;
+      opacity: 0;
+      transition: opacity .2s;
+      pointer-events: none;
+      z-index: 50;
+    }
+    .toast.show { opacity: .92; }
+
+    footer { text-align: center; padding: 16px 16px 24px; font-size: .72rem; color: var(--sub); }
+    footer a { color: var(--blue); text-decoration: none; }
+
+    @media (hover: none) { .desk-only { display: none; } }
+    @media (max-width: 480px) {
+      .hdr-nav { gap: 4px; }
+      .hdr-link { padding: 5px 7px; font-size: .72rem; }
+      #chart-time { height: 760px; }
+    }
+
+    /* Brede skjermer: alle visningene samtidig */
+    @media (min-width: 1100px) {
+      .page { padding: 20px 24px; }
+      .view-tabs { display: none; }
+      .views { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+      .views > .card { margin-bottom: 0; }
+      .view { display: block; }
+      #view-time { grid-column: 1 / -1; }
+      #chart-time { height: 720px; }
+      #chart-season, #chart-scatter { height: 420px; }
+    }
+  </style>
+</head>
+<body>
+<div class="topbar">
+<header>
+  <div class="header-inner">
+    <div>
+      <h1>Utforsk</h1>
+      <p id="hdr-sub">Laster data…</p>
+    </div>
+    <nav class="hdr-nav">
+      <a class="hdr-link" href="index.html">Oversikt</a>
+      <a class="hdr-link" href="data.html">Data</a>
+      <a class="hdr-link active" href="utforsk.html">Utforsk</a>
+    </nav>
+  </div>
+</header>
+<div class="tabs-bar" id="tabs-bar"></div>
+</div>
+
+<div class="page">
+  <div class="card">
+    <div class="controls">
+      <div class="control">
+        <span class="lbl">Tidsrom</span>
+        <div class="seg" id="seg-range">
+          <button data-v="1">1 år</button>
+          <button data-v="3">3 år</button>
+          <button data-v="5">5 år</button>
+          <button data-v="2015">Fra 2015</button>
+          <button data-v="alt">Alt</button>
+        </div>
+      </div>
+      <div class="control">
+        <span class="lbl">Oppløsning</span>
+        <div class="seg" id="seg-res">
+          <button data-v="uke">Uke</button>
+          <button data-v="maned">Måned</button>
+        </div>
+      </div>
+      <div class="control" style="margin-left:auto">
+        <button class="btn" id="btn-share">Kopier lenke</button>
+        <button class="btn" id="btn-csv">Last ned utvalg (CSV)</button>
+      </div>
+    </div>
+    <div class="presets" id="presets"><span class="lbl">Utgangspunkter:</span></div>
+  </div>
+
+  <div class="card">
+    <div class="summary" id="summary"></div>
+  </div>
+
+  <div class="view-tabs">
+    <div class="seg" id="seg-view">
+      <button data-v="time">Tidslinje</button>
+      <button data-v="season">Sesong</button>
+      <button data-v="scatter">Sammenheng</button>
+    </div>
+  </div>
+
+  <div class="views">
+    <div class="card view" id="view-time">
+      <div class="card-head">
+        <div>
+          <div class="title">Tidslinje</div>
+          <div class="sub">Dra i stripen nederst for å velge tidsrom<span class="desk-only">. Ctrl + rulling zoomer.</span></div>
+        </div>
+        <div class="actions"><button class="btn" data-png="time">PNG</button></div>
+      </div>
+      <div class="chart" id="chart-time"></div>
+    </div>
+
+    <div class="card view" id="view-season">
+      <div class="card-head">
+        <div>
+          <div class="title">Sesong</div>
+          <div class="sub">Valgte år mot spennet i alle år</div>
+        </div>
+        <div class="actions"><button class="btn" data-png="season">PNG</button></div>
+      </div>
+      <div class="sub-controls">
+        <div class="control">
+          <label for="season-metric">Størrelse</label>
+          <select id="season-metric"></select>
+        </div>
+      </div>
+      <div class="years" id="season-years"></div>
+      <div class="chart" id="chart-season"></div>
+    </div>
+
+    <div class="card view" id="view-scatter">
+      <div class="card-head">
+        <div>
+          <div class="title">Sammenheng</div>
+          <div class="sub">Valgt tidsrom · klikk på et punkt for å se uka i tidslinjen</div>
+        </div>
+        <div class="actions"><button class="btn" data-png="scatter">PNG</button></div>
+      </div>
+      <div class="sub-controls">
+        <div class="control">
+          <label for="sc-x">Vannrett akse</label>
+          <select id="sc-x"></select>
+        </div>
+        <div class="control">
+          <label for="sc-y">Loddrett akse</label>
+          <select id="sc-y"></select>
+        </div>
+        <div class="control">
+          <span class="lbl">Farge</span>
+          <div class="seg" id="seg-color">
+            <button data-v="aar">År</button>
+            <button data-v="sesong">Årstid</button>
+          </div>
+        </div>
+        <div class="control">
+          <label for="sc-season">Uker</label>
+          <select id="sc-season">
+            <option value="alle">Hele året</option>
+            <option value="vinter">Vinter (des–feb)</option>
+            <option value="var">Vår (mar–mai)</option>
+            <option value="sommer">Sommer (jun–aug)</option>
+            <option value="host">Høst (sep–nov)</option>
+          </select>
+        </div>
+      </div>
+      <div class="stats" id="scatter-stats"></div>
+      <div class="chart" id="chart-scatter"></div>
+      <div class="note">ρ er rangkorrelasjon (−1 til 1). R² er andelen av variasjonen langs den loddrette aksen som trendlinjen forklarer.
+        Sammenheng betyr ikke årsak, og uker som følger etter hverandre er ikke uavhengige observasjoner.</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:14px">
+    <div class="note" style="margin-top:0"><strong>Om dataene.</strong> Magasinfylling fra NVE (ukentlig, fra 1995). Priser er
+      ukesnitt av day-ahead-priser og utvekslingsflyt er ukesnitt av fysisk flyt over grensene, begge fra ENTSO-E (fra 2015).
+      «Norge» viser fylling for hele landet, et enkelt snitt av prisene i NO1–NO5 og samlet utveksling med utlandet.
+      Netto eksport er positiv når det går mer kraft ut av Norge enn inn. Tysk pris er DE-LU (DE-AT-LU før oktober 2018).</div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<footer>
+  Data: <a href="https://www.nve.no/energi/analyser-og-statistikk/magasinstatistikk/" target="_blank" rel="noopener">NVE Magasinstatistikk</a>
+  &nbsp;·&nbsp; Priser og flyt: <a href="https://transparency.entsoe.eu/" target="_blank" rel="noopener">ENTSO-E</a>
+</footer>
+
+<script src="felles.js"></script>
+<script>
+'use strict';
+
+// ── Farger (kontrollert for fargeblindhet) ───────────────────
+const C = {
+  fill:    '#004890',
+  normal:  '#9ca3af',
+  price:   '#d97706',
+  de:      '#e87ba4',
+  se:      '#2a78d6',
+  band:    'rgba(0,114,176,0.13)',
+  grid:    '#f0f2f5',
+  axis:    '#9ca3af',
+  text:    '#6b7280',
+  event:   '#c4c9d1',
+};
+const COUNTRY_COLOR = {
+  Sverige: '#2a78d6', Finland: '#1baf7a', Danmark: '#eda100',
+  Tyskland: '#e87ba4', Nederland: '#6250d6', Storbritannia: '#008300',
+};
+const SEASON_COLOR = { Vinter: '#2a78d6', 'Vår': '#1baf7a', Sommer: '#eda100', 'Høst': '#6250d6' };
+// Faste plasser for år i sesongvisningen; inneværende år er alltid oransje
+const YEAR_SLOTS = ['#2a78d6', '#1baf7a', '#6250d6', '#e87ba4', '#008300', '#eda100'];
+
+const EVENTS = [
+  { date: '2020-12-09', label: 'NordLink' },
+  { date: '2021-10-01', label: 'North Sea Link' },
+  { date: '2022-02-24', label: 'Krigen i Ukraina' },
+  { date: '2025-10-01', label: '15-min. priser' },
+];
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'mai', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'des'];
+const SEASON_OF_MONTH = ['Vinter', 'Vinter', 'Vår', 'Vår', 'Vår', 'Sommer', 'Sommer', 'Sommer', 'Høst', 'Høst', 'Høst', 'Vinter'];
+const SEASON_FILTER = { vinter: 'Vinter', var: 'Vår', sommer: 'Sommer', host: 'Høst' };
+
+// ── Størrelser man kan velge ─────────────────────────────────
+function metrics() {
+  const area = activeKey === 'LAND' ? 'snitt NO1–NO5' : activeKey;
+  const short = activeKey === 'LAND' ? 'Norge' : activeKey;
+  return {
+    pct:     { label: 'Fyllingsgrad',               unit: '%',     d: 1 },
+    avvik:   { label: 'Fylling vs. normalår',       unit: 'pp',    d: 1 },
+    twh:     { label: 'Fylling',                    unit: 'TWh',   d: 2 },
+    endring: { label: 'Endring i fylling',          unit: 'pp',    d: 1 },
+    pris:    { label: `Pris (${area})`,             unit: '€/MWh', d: 1 },
+    prisDE:  { label: 'Tysk pris',                  unit: '€/MWh', d: 1 },
+    prisSE2: { label: 'Svensk pris (SE2)',          unit: '€/MWh', d: 1 },
+    diffDE:  { label: `${short} minus Tyskland`,    unit: '€/MWh', d: 1 },
+    diffSE2: { label: `${short} minus SE2`,         unit: '€/MWh', d: 1 },
+    netto:   { label: 'Netto eksport',              unit: 'MW',    d: 0 },
+    uke:     { label: 'Uke i året',                 unit: '',      d: 0 },
+    normal:  { label: 'Normalår',                   unit: '%',     d: 1, hidden: true },
+  };
+}
+const SEASON_METRICS = ['pct', 'avvik', 'pris', 'prisDE', 'prisSE2', 'diffDE', 'diffSE2', 'netto'];
+const NUMERIC = ['pct', 'avvik', 'twh', 'endring', 'pris', 'prisDE', 'prisSE2', 'diffDE', 'diffSE2', 'netto', 'normal'];
+
+// ── Tilstand (speiles i URL-en) ──────────────────────────────
+let allData = [], priceData = null, flowData = null;
+let activeKey = 'LAND';
+const state = {
+  fra: null, til: null, res: 'uke', view: 'time',
+  sm: 'pct', aar: [],
+  sx: 'avvik', sy: 'pris', sf: 'aar', ss: 'alle',
+};
+let yearColor = {};      // år → farge, beholdes når andre år velges bort
+let weekRows = [];       // alle uker for valgt område
+let rows = [];           // i valgt oppløsning
+let lastDate = null;
+const charts = {};
+
+// ── Dataoppbygging ───────────────────────────────────────────
+function buildWeekRows() {
+  const table = buildWeekTable(allData, priceData, activeKey);
+  const flows = flowByWeek(flowData, activeKey);
+  return table.map(r => {
+    const k = `${r.iso_aar}-${r.iso_uke}`;
+    const f = flows?.get(k);
+    return {
+      ...r,
+      t: Date.parse(r.dato),
+      normal: r.pct != null && r.avvik != null ? r.pct - r.avvik : null,
+      diffDE:  r.pris != null && r.prisDE != null ? r.pris - r.prisDE : null,
+      diffSE2: r.pris != null && r.prisSE2 != null ? r.pris - r.prisSE2 : null,
+      netto: f ? f.netto : null,
+      land:  f ? f.land : null,
+      uke: r.iso_uke,
+      maned: Number(r.dato.slice(5, 7)),
+      label: `Uke ${r.iso_uke}, ${r.iso_aar}`,
+    };
+  });
+}
+
+function monthRows(weeks) {
+  const groups = new Map();
+  for (const r of weeks) {
+    const ym = r.dato.slice(0, 7);
+    let g = groups.get(ym);
+    if (!g) {
+      g = { ym, n: {}, sum: {}, land: {}, landN: 0 };
+      groups.set(ym, g);
+    }
+    for (const k of NUMERIC) {
+      if (r[k] == null) continue;
+      g.sum[k] = (g.sum[k] ?? 0) + r[k];
+      g.n[k] = (g.n[k] ?? 0) + 1;
+    }
+    if (r.land) {
+      g.landN++;
+      for (const [c, v] of Object.entries(r.land)) g.land[c] = (g.land[c] ?? 0) + v;
+    }
+  }
+  return [...groups.values()].map(g => {
+    const [y, m] = g.ym.split('-').map(Number);
+    const out = {
+      iso_aar: y, dato: `${g.ym}-15`, t: Date.parse(`${g.ym}-15`), maned: m,
+      uke: Math.round((m - 0.5) * 52 / 12), label: `${MONTHS[m - 1]} ${y}`,
+      land: g.landN ? Object.fromEntries(Object.entries(g.land).map(([c, v]) => [c, v / g.landN])) : null,
+    };
+    for (const k of NUMERIC) out[k] = g.n[k] ? g.sum[k] / g.n[k] : null;
+    out.endring = null;   // gir ikke mening som månedssnitt
+    return out;
+  });
+}
+
+function recompute() {
+  weekRows = buildWeekRows();
+  rows = state.res === 'maned' ? monthRows(weekRows) : weekRows;
+  lastDate = weekRows.length ? weekRows[weekRows.length - 1].dato : null;
+}
+
+const inWindow = r => r.dato >= state.fra && r.dato <= state.til;
+
+// ── Formatering ──────────────────────────────────────────────
+const nf = {};
+function fmt(v, d = 1) {
+  if (v == null || Number.isNaN(v)) return '–';
+  nf[d] ??= new Intl.NumberFormat('nb-NO', { minimumFractionDigits: d, maximumFractionDigits: d });
+  return nf[d].format(v);
+}
+const signed = (v, d = 1) => v == null ? '–' : (v > 0 ? '+' : v < 0 ? '−' : '') + fmt(Math.abs(v), d);
+const fmtM = (key, v) => {
+  const m = metrics()[key];
+  return `${fmt(v, m.d)}${m.unit ? ' ' + m.unit : ''}`;
+};
+function dateLabel(iso) {
+  const [y, m, d] = iso.split('-').map(Number);
+  return `${d}. ${MONTHS[m - 1]} ${y}`;
+}
+function addYears(iso, n) {
+  const d = new Date(iso);
+  d.setUTCFullYear(d.getUTCFullYear() + n);
+  return d.toISOString().slice(0, 10);
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+}
+
+// ── Statistikk ───────────────────────────────────────────────
+const mean = a => a.reduce((s, v) => s + v, 0) / a.length;
+function cov(a, b) {
+  const ma = mean(a), mb = mean(b);
+  let s = 0;
+  for (let i = 0; i < a.length; i++) s += (a[i] - ma) * (b[i] - mb);
+  return s;
+}
+function fitLine(xs, ys) {
+  const sxy = cov(xs, ys), sxx = cov(xs, xs), syy = cov(ys, ys);
+  const slope = sxy / sxx;
+  return { r: sxy / Math.sqrt(sxx * syy), slope, intercept: mean(ys) - slope * mean(xs) };
+}
+function ranks(values) {
+  const idx = values.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]);
+  const r = new Array(values.length);
+  for (let i = 0; i < idx.length;) {
+    let j = i;
+    while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+    for (let k = i; k <= j; k++) r[idx[k][1]] = (i + j) / 2 + 1;
+    i = j + 1;
+  }
+  return r;
+}
+
+// ── URL-tilstand ─────────────────────────────────────────────
+function writeUrl() {
+  const p = new URLSearchParams({
+    omr: activeKey, fra: state.fra, til: state.til, res: state.res,
+    sm: state.sm, aar: state.aar.join(','), sx: state.sx, sy: state.sy, sf: state.sf, ss: state.ss,
+  });
+  history.replaceState(null, '', '#' + p.toString());
+}
+
+function readUrl() {
+  const p = new URLSearchParams(location.hash.slice(1));
+  const m = metrics();
+  if (REGIONS.some(r => r.key === p.get('omr'))) activeKey = p.get('omr');
+  for (const k of ['fra', 'til']) if (/^\d{4}-\d{2}-\d{2}$/.test(p.get(k) ?? '')) state[k] = p.get(k);
+  if (['uke', 'maned'].includes(p.get('res'))) state.res = p.get('res');
+  if (SEASON_METRICS.includes(p.get('sm'))) state.sm = p.get('sm');
+  if (p.get('aar')) state.aar = p.get('aar').split(',').map(Number).filter(y => y > 1990 && y <= CURRENT_YEAR).slice(0, 6);
+  for (const k of ['sx', 'sy']) if (m[p.get(k)]) state[k] = p.get(k);
+  if (['aar', 'sesong'].includes(p.get('sf'))) state.sf = p.get('sf');
+  if (['alle', ...Object.keys(SEASON_FILTER)].includes(p.get('ss'))) state.ss = p.get('ss');
+}
+
+// ── Utgangspunkter ───────────────────────────────────────────
+function presets() {
+  const til = lastDate;
+  return [
+    { label: 'Energikrisen 2021–23', omr: 'NO2', fra: '2021-01-01', til: '2023-12-31',
+      sx: 'prisDE', sy: 'pris', sf: 'aar', sm: 'pris', aar: [2021, 2022, 2023] },
+    { label: 'Tørkeåret 2018', omr: 'NO2', fra: '2017-06-01', til: '2019-06-30',
+      sx: 'avvik', sy: 'pris', sf: 'sesong', sm: 'avvik', aar: [2017, 2018, 2019] },
+    { label: 'Nord-Norge og Sverige', omr: 'NO4', fra: '2015-01-01', til,
+      sx: 'prisSE2', sy: 'pris', sf: 'aar', sm: 'diffSE2', aar: [CURRENT_YEAR - 1, CURRENT_YEAR] },
+    { label: 'Kablene og eksporten', omr: 'NO2', fra: '2019-01-01', til,
+      sx: 'diffDE', sy: 'netto', sf: 'aar', sm: 'netto', aar: [2020, 2022, CURRENT_YEAR] },
+    { label: 'Vinter mot sommer', omr: 'LAND', fra: '2015-01-01', til,
+      sx: 'avvik', sy: 'pris', sf: 'sesong', sm: 'pris', aar: [CURRENT_YEAR - 1, CURRENT_YEAR] },
+  ];
+}
+
+function applyPreset(p) {
+  activeKey = p.omr;
+  Object.assign(state, { fra: p.fra, til: p.til, sx: p.sx, sy: p.sy, sf: p.sf, sm: p.sm, ss: 'alle' });
+  setYears(p.aar);
+  renderTabs();
+  recompute();
+  renderAll();
+}
+
+// ── Faner og kontroller ──────────────────────────────────────
+function renderTabs() {
+  document.getElementById('tabs-bar').innerHTML = REGIONS.map(r => `
+    <button class="tab${r.key === activeKey ? ' active' : ''}" data-key="${r.key}">${r.label}</button>
+  `).join('');
+}
+
+function markSeg(id, v) {
+  for (const b of document.querySelectorAll(`#${id} button`)) b.classList.toggle('active', b.dataset.v === String(v));
+}
+
+function rangeKey() {
+  if (state.til !== lastDate) return null;
+  if (state.fra <= rows[0]?.dato) return 'alt';
+  if (state.fra === '2015-01-01') return '2015';
+  for (const n of [1, 3, 5]) if (state.fra === addYears(lastDate, -n)) return String(n);
+  return null;
+}
+
+function fillSelects() {
+  const m = metrics();
+  const opts = (keys, sel) => keys.map(k => `<option value="${k}"${k === sel ? ' selected' : ''}>${m[k].label}${m[k].unit ? ` (${m[k].unit})` : ''}</option>`).join('');
+  const all = Object.keys(m).filter(k => !m[k].hidden);
+  document.getElementById('sc-x').innerHTML = opts(all, state.sx);
+  document.getElementById('sc-y').innerHTML = opts(all.filter(k => k !== 'uke'), state.sy);
+  document.getElementById('season-metric').innerHTML = opts(SEASON_METRICS, state.sm);
+  document.getElementById('sc-season').value = state.ss;
+}
+
+function setYears(years) {
+  const keep = {};
+  for (const y of years) if (yearColor[y]) keep[y] = yearColor[y];
+  yearColor = keep;
+  for (const y of years) {
+    if (yearColor[y] || y === CURRENT_YEAR) continue;
+    const used = new Set(Object.values(yearColor));
+    yearColor[y] = YEAR_SLOTS.find(c => !used.has(c)) ?? YEAR_SLOTS[0];
+  }
+  state.aar = years;
+}
+const colorOfYear = y => y === CURRENT_YEAR ? C.price : yearColor[y];
+
+// ── Oppsummering ─────────────────────────────────────────────
+function renderSummary() {
+  const sel = weekRows.filter(inWindow);
+  const el = document.getElementById('summary');
+  if (!sel.length) { el.innerHTML = 'Ingen uker i valgt tidsrom.'; return; }
+  const avg = k => { const v = sel.map(r => r[k]).filter(v => v != null); return v.length ? mean(v) : null; };
+  const name = REGIONS.find(r => r.key === activeKey).name;
+  const pris = avg('pris'), de = avg('prisDE'), se = avg('prisSE2'), avvik = avg('avvik'), netto = avg('netto');
+  const nettoTWh = sel.reduce((s, r) => s + (r.netto ?? 0) * 168, 0) / 1e6;
+  const rel = (a, b) => a != null && b ? (a / b - 1) * 100 : null;
+
+  const parts = [`<strong>${name}</strong>, ${dateLabel(state.fra)} – ${dateLabel(state.til)} (${sel.length} uker).`];
+  if (avvik != null) parts.push(`Fyllingen lå i snitt <strong>${signed(avvik)} pp</strong> ${avvik < 0 ? 'under' : 'over'} normalen.`);
+  if (pris != null && de != null) {
+    const r = rel(pris, de);
+    parts.push(`Prisen var i snitt <strong>${fmt(pris)} €/MWh</strong>, ${fmt(Math.abs(r), 0)} % ${r < 0 ? 'lavere' : 'høyere'} enn i Tyskland`
+      + (se != null ? ` og ${fmt(Math.abs(rel(pris, se)), 0)} % ${rel(pris, se) < 0 ? 'lavere' : 'høyere'} enn i SE2.` : '.'));
+  }
+  if (netto != null) parts.push(`${activeKey === 'LAND' ? 'Norge' : activeKey} hadde netto ${netto >= 0 ? 'eksport' : 'import'} til utlandet på
+    <strong>${fmt(Math.abs(nettoTWh), 1)} TWh</strong> i perioden.`);
+  else if (activeKey !== 'LAND') parts.push(`${activeKey} har ingen direkte utenlandsforbindelser.`);
+  el.innerHTML = parts.join(' ');
+}
+
+// ── Tidslinje ────────────────────────────────────────────────
+// Fire paneler under hverandre. På smal skjerm ligger forklaringen på egne linjer under tittelen.
+function panelLayout(narrow) {
+  const el = document.getElementById('chart-time');
+  const h = el.clientHeight || 640;
+  const hdr = narrow ? 64 : 34, gap = 10, bottom = 70;
+  const ph = Math.floor((h - bottom - hdr * 4 - gap * 3) / 4);
+  return Array.from({ length: 4 }, (_, i) => ({ top: hdr + i * (ph + gap + hdr), height: ph, hdr }));
+}
+
+function eventLines(withLabel) {
+  return {
+    symbol: 'none',
+    silent: true,
+    animation: false,
+    lineStyle: { color: C.event, type: 'dashed', width: 1 },
+    label: withLabel
+      ? { show: true, formatter: '{b}', position: 'insideEndTop', fontSize: 9, color: C.text }
+      : { show: false },
+    data: EVENTS.map(e => ({ xAxis: Date.parse(e.date), name: e.label })),
+  };
+}
+
+function drawTimeline() {
+  const chart = charts.time;
+  const m = metrics();
+  const narrow = window.innerWidth < 700;
+  const L = panelLayout(narrow);
+  const data = k => rows.map(r => [r.t, r[k] == null ? null : +r[k].toFixed(3)]);
+  const countries = [...new Set(rows.flatMap(r => Object.keys(r.land ?? {})))]
+    .sort((a, b) => Object.keys(COUNTRY_COLOR).indexOf(a) - Object.keys(COUNTRY_COLOR).indexOf(b));
+  const hasFlow = countries.length > 0;
+  const line = (name, key, color, grid, extra = {}) => ({
+    type: 'line', name, data: data(key), xAxisIndex: grid, yAxisIndex: grid,
+    showSymbol: false, connectNulls: false, lineStyle: { width: 1.8, color }, itemStyle: { color },
+    emphasis: { disabled: true }, metricKey: key, ...extra,
+  });
+
+  const series = [
+    line('Fyllingsgrad', 'pct', C.fill, 0, { markLine: eventLines(true), lineStyle: { width: 2.2, color: C.fill } }),
+    line('Normalår', 'normal', C.normal, 0, { lineStyle: { width: 1.2, color: C.normal, type: 'dashed' } }),
+    line(m.pris.label, 'pris', C.price, 1, { markLine: eventLines(false), lineStyle: { width: 2, color: C.price } }),
+    line('Tysk pris', 'prisDE', C.de, 1),
+    line('Svensk pris (SE2)', 'prisSE2', C.se, 1),
+    line('mot Tyskland', 'diffDE', C.de, 2, {
+      markLine: { ...eventLines(false), data: [...eventLines(false).data, { yAxis: 0, name: '' }],
+                  lineStyle: { color: '#d1d5db', type: 'solid', width: 1 } },
+    }),
+    line('mot SE2', 'diffSE2', C.se, 2),
+    ...countries.map((c, i) => ({
+      type: 'bar', name: c, stack: 'flyt', stackStrategy: 'samesign', xAxisIndex: 3, yAxisIndex: 3,
+      data: rows.map(r => [r.t, r.land?.[c] == null ? null : Math.round(r.land[c])]),
+      itemStyle: { color: COUNTRY_COLOR[c] ?? '#9ca3af' }, barCategoryGap: '10%', emphasis: { disabled: true },
+      large: true, metricKey: 'netto', ...(i === 0 ? { markLine: eventLines(false) } : {}),
+    })),
+  ];
+
+  const keyOf = Object.fromEntries(series.map(s => [s.name, s.metricKey]));
+
+  const titles = [
+    'Fyllingsgrad (%)',
+    'Pris (€/MWh)',
+    `Prisforskjell: ${activeKey === 'LAND' ? 'Norge' : activeKey} minus utland (€/MWh)`,
+    'Netto eksport (MW, + = eksport)',
+  ];
+  const legends = [
+    ['Fyllingsgrad', 'Normalår'],
+    [m.pris.label, 'Tysk pris', 'Svensk pris (SE2)'],
+    ['mot Tyskland', 'mot SE2'],
+    countries,
+  ];
+  const zoomStart = Date.parse(state.fra), zoomEnd = Date.parse(state.til);
+
+  chart.setOption({
+    animation: false,
+    textStyle: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+    title: titles.map((text, i) => ({
+      text, left: 0, top: L[i].top - L[i].hdr + 4, textStyle: { fontSize: 12, fontWeight: 600, color: '#111827' },
+    })),
+    legend: legends.map((names, i) => ({
+      data: names, itemWidth: 14, itemHeight: 8, itemGap: 8, textStyle: { fontSize: 11, color: C.text },
+      ...(narrow ? { top: L[i].top - L[i].hdr + 24, left: 0, right: 0 } : { top: L[i].top - L[i].hdr + 4, right: 0 }),
+    })),
+    grid: L.map(l => ({ top: l.top, height: l.height, left: 48, right: 12 })),
+    xAxis: L.map((_, i) => ({
+      type: 'time', gridIndex: i,
+      axisLabel: { show: i === 3, color: C.axis, fontSize: 10, hideOverlap: true },
+      axisTick: { show: false }, axisLine: { lineStyle: { color: '#e5e7eb' } }, splitLine: { show: false },
+    })),
+    yAxis: L.map((_, i) => ({
+      type: 'value', gridIndex: i, scale: i !== 0, splitNumber: 3,
+      min: i === 0 ? 0 : undefined, max: i === 0 ? 100 : undefined, interval: i === 0 ? 25 : undefined,
+      axisLabel: { color: C.axis, fontSize: 10, formatter: v => i === 3 ? fmt(v, 0) : v },
+      splitLine: { lineStyle: { color: C.grid } },
+    })),
+    axisPointer: { link: [{ xAxisIndex: 'all' }], lineStyle: { color: '#9ca3af' } },
+    tooltip: {
+      trigger: 'axis',
+      confine: true,
+      backgroundColor: '#fff',
+      borderColor: '#e5e7eb',
+      textStyle: { fontSize: 12, color: '#374151' },
+      formatter: params => {
+        if (!params.length) return '';
+        const t = params[0].value[0];
+        const r = rows.find(x => x.t === t);
+        const lines = params.filter(p => p.value[1] != null && keyOf[p.seriesName]).map(p =>
+          `${p.marker}${escapeHtml(p.seriesName)}: <b>${fmtM(keyOf[p.seriesName], p.value[1])}</b>`);
+        if (r && params.some(p => keyOf[p.seriesName] === 'netto') && r.netto != null) {
+          lines.push(`Sum: <b>${signed(r.netto, 0)} MW</b>`);
+        }
+        return `<b>${r ? r.label : ''}</b><br>${lines.join('<br>')}`;
+      },
+    },
+    dataZoom: [
+      {
+        type: 'slider', xAxisIndex: [0, 1, 2, 3], bottom: 10, height: 26,
+        startValue: zoomStart, endValue: zoomEnd,
+        labelFormatter: v => dateLabel(new Date(v).toISOString().slice(0, 10)),
+        textStyle: { fontSize: 10, color: C.text }, brushSelect: false,
+        borderColor: '#e5e7eb', fillerColor: 'rgba(0,114,176,0.12)',
+        dataBackground: { lineStyle: { color: '#c7d2e0' }, areaStyle: { color: '#eef2f7' } },
+      },
+      { type: 'inside', xAxisIndex: [0, 1, 2, 3], startValue: zoomStart, endValue: zoomEnd,
+        zoomOnMouseWheel: 'ctrl', moveOnMouseWheel: false, moveOnMouseMove: !narrow, preventDefaultMouseMove: false },
+    ],
+    graphic: hasFlow ? [] : [{
+      type: 'text', left: 'center', top: L[3].top + L[3].height / 2 - 8,
+      style: { text: `${activeKey} har ingen direkte utenlandsforbindelser`, fill: C.text, fontSize: 12 },
+    }],
+    series,
+  }, { notMerge: true });
+}
+
+// ── Sesong ───────────────────────────────────────────────────
+function drawSeason() {
+  const chart = charts.season;
+  const key = state.sm;
+  const m = metrics()[key];
+  const weeks = Array.from({ length: 52 }, (_, i) => i + 1);
+  const byYear = {};
+  for (const r of weekRows) {
+    if (r[key] == null || r.uke > 52) continue;
+    (byYear[r.iso_aar] ??= {})[r.uke] = r[key];
+  }
+  const histYears = Object.keys(byYear).map(Number).filter(y => y < CURRENT_YEAR);
+  const stat = weeks.map(w => {
+    const v = histYears.map(y => byYear[y][w]).filter(v => v != null);
+    return v.length ? { min: Math.min(...v), max: Math.max(...v), med: median(v) } : null;
+  });
+  const avail = Object.keys(byYear).map(Number).filter(y => y >= CURRENT_YEAR - 11).sort((a, b) => b - a);
+
+  document.getElementById('season-years').innerHTML = avail.map(y => {
+    const on = state.aar.includes(y);
+    return `<button class="chip${on ? ' on' : ''}" data-year="${y}">${on ? `<span class="sw" style="background:${colorOfYear(y)}"></span>` : ''}${y}</button>`;
+  }).join('');
+
+  const span = histYears.length ? `${Math.min(...histYears)}–${Math.max(...histYears)}` : '';
+  const series = [
+    { type: 'line', name: '_min', data: stat.map(s => s?.min ?? null), stack: 'band', stackStrategy: 'all',
+      lineStyle: { opacity: 0 }, showSymbol: false, silent: true, emphasis: { disabled: true } },
+    { type: 'line', name: `Spenn ${span}`, data: stat.map(s => s ? s.max - s.min : null), stack: 'band', stackStrategy: 'all',
+      lineStyle: { opacity: 0 }, areaStyle: { color: C.band }, itemStyle: { color: 'rgba(0,114,176,0.35)' },
+      showSymbol: false, silent: true, emphasis: { disabled: true } },
+    { type: 'line', name: `Median ${span}`, data: stat.map(s => s?.med ?? null), showSymbol: false,
+      lineStyle: { color: C.normal, type: 'dashed', width: 1.4 }, itemStyle: { color: C.normal }, emphasis: { disabled: true } },
+    ...[...state.aar].sort((a, b) => a - b).filter(y => byYear[y]).map(y => ({
+      type: 'line', name: String(y), data: weeks.map(w => byYear[y][w] ?? null), showSymbol: false,
+      lineStyle: { width: y === CURRENT_YEAR ? 2.6 : 1.8, color: colorOfYear(y) }, itemStyle: { color: colorOfYear(y) },
+      emphasis: { disabled: true }, z: y === CURRENT_YEAR ? 5 : 3,
+    })),
+  ];
+
+  chart.setOption({
+    animation: false,
+    textStyle: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+    legend: { data: series.filter(s => !s.name.startsWith('_')).map(s => s.name), top: 0, left: 0,
+              itemWidth: 14, itemHeight: 8, textStyle: { fontSize: 11, color: C.text } },
+    grid: { top: 52, left: 48, right: 12, bottom: 28 },
+    xAxis: {
+      type: 'category', data: weeks, boundaryGap: false,
+      axisLabel: { color: C.axis, fontSize: 10, interval: 0, formatter: w => MONTH_LABEL[w] ?? '' },
+      axisTick: { show: false }, axisLine: { lineStyle: { color: '#e5e7eb' } },
+    },
+    yAxis: { type: 'value', scale: key !== 'pct', min: key === 'pct' ? 0 : undefined, max: key === 'pct' ? 100 : undefined,
+             name: m.unit, nameTextStyle: { color: C.text, fontSize: 10, align: 'right' },
+             axisLabel: { color: C.axis, fontSize: 10 }, splitLine: { lineStyle: { color: C.grid } } },
+    tooltip: {
+      trigger: 'axis', confine: true, backgroundColor: '#fff', borderColor: '#e5e7eb',
+      textStyle: { fontSize: 12, color: '#374151' },
+      formatter: params => {
+        const w = params[0].axisValue;
+        const s = stat[w - 1];
+        const lines = params.filter(p => !p.seriesName.startsWith('_') && !p.seriesName.startsWith('Spenn') && p.value != null)
+          .map(p => `${p.marker}${p.seriesName}: <b>${fmtM(key, p.value)}</b>`);
+        if (s) lines.push(`<span style="color:#6b7280">Spenn: ${fmtM(key, s.min)} – ${fmtM(key, s.max)}</span>`);
+        return `<b>Uke ${w}</b> · ${escapeHtml(m.label)}<br>${lines.join('<br>')}`;
+      },
+    },
+    series,
+  }, { notMerge: true });
+}
+
+// ── Sammenheng ───────────────────────────────────────────────
+function drawScatter() {
+  const chart = charts.scatter;
+  const m = metrics();
+  const xk = state.sx, yk = state.sy;
+  const pts = rows.filter(inWindow).filter(r =>
+    r[xk] != null && r[yk] != null && (state.ss === 'alle' || SEASON_OF_MONTH[r.maned - 1] === SEASON_FILTER[state.ss]));
+  const statsEl = document.getElementById('scatter-stats');
+
+  if (pts.length < 8) {
+    statsEl.textContent = 'For få punkter med begge størrelser i valgt tidsrom.';
+    chart.setOption({ series: [], graphic: [{ type: 'text', left: 'center', top: 'middle',
+      style: { text: 'Ingen data å vise', fill: C.text, fontSize: 12 } }] }, { notMerge: true });
+    return;
+  }
+
+  const xs = pts.map(r => r[xk]), ys = pts.map(r => r[yk]);
+  const fit = fitLine(xs, ys);
+  const rho = fitLine(ranks(xs), ranks(ys)).r;
+  const unitWord = state.res === 'maned' ? 'måneder' : 'uker';
+  statsEl.innerHTML = `<strong>${pts.length}</strong> ${unitWord} · ρ = <strong>${fmt(rho, 2)}</strong> ·
+    R² = <strong>${fmt(fit.r * fit.r, 2)}</strong> · trend: ${signed(fit.slope, Math.abs(fit.slope) < 1 ? 2 : 1)} ${m[yk].unit}
+    per ${xk === 'uke' ? 'uke' : m[xk].unit}`;
+
+  const toPt = r => ({ value: [r[xk], r[yk]], row: r });
+  let groups;
+  if (state.sf === 'sesong') {
+    groups = Object.keys(SEASON_COLOR).map(s => ({
+      name: s, color: SEASON_COLOR[s], data: pts.filter(r => SEASON_OF_MONTH[r.maned - 1] === s),
+    }));
+  } else {
+    const years = [...new Set(pts.map(r => r.iso_aar))].sort((a, b) => a - b);
+    const older = years.filter(y => y < CURRENT_YEAR);
+    // Sekvensiell blåskala: eldre år lyse, nyere mørke; inneværende år oransje
+    const shade = i => {
+      const t = older.length > 1 ? i / (older.length - 1) : 1;
+      const l = Math.round(82 - t * 46);
+      return `hsl(208, 62%, ${l}%)`;
+    };
+    groups = [
+      ...older.map((y, i) => ({ name: String(y), color: shade(i), data: pts.filter(r => r.iso_aar === y) })),
+      ...(years.includes(CURRENT_YEAR) ? [{ name: String(CURRENT_YEAR), color: C.price, data: pts.filter(r => r.iso_aar === CURRENT_YEAR) }] : []),
+    ];
+  }
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+
+  chart.setOption({
+    animation: false,
+    textStyle: { fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif' },
+    legend: { data: groups.filter(g => g.data.length).map(g => g.name), top: 0, left: 0, type: 'scroll',
+              itemWidth: 10, itemHeight: 10, textStyle: { fontSize: 11, color: C.text } },
+    grid: { top: 40, left: 52, right: 16, bottom: 44 },
+    xAxis: { type: 'value', scale: true, name: `${m[xk].label}${m[xk].unit ? ` (${m[xk].unit})` : ''}`,
+             nameLocation: 'middle', nameGap: 26, nameTextStyle: { color: C.text, fontSize: 11 },
+             axisLabel: { color: C.axis, fontSize: 10 }, splitLine: { lineStyle: { color: C.grid } } },
+    yAxis: { type: 'value', scale: true, name: `${m[yk].label}${m[yk].unit ? ` (${m[yk].unit})` : ''}`,
+             nameLocation: 'middle', nameGap: 38, nameTextStyle: { color: C.text, fontSize: 11 },
+             axisLabel: { color: C.axis, fontSize: 10 }, splitLine: { lineStyle: { color: C.grid } } },
+    tooltip: {
+      trigger: 'item', confine: true, backgroundColor: '#fff', borderColor: '#e5e7eb',
+      textStyle: { fontSize: 12, color: '#374151' },
+      formatter: p => {
+        const r = p.data?.row;
+        if (!r) return '';
+        return `<b>${r.label}</b><br>${escapeHtml(m[xk].label)}: <b>${fmtM(xk, r[xk])}</b><br>${escapeHtml(m[yk].label)}: <b>${fmtM(yk, r[yk])}</b>`;
+      },
+    },
+    series: [
+      ...groups.map(g => ({
+        type: 'scatter', name: g.name, data: g.data.map(toPt), symbolSize: 7,
+        itemStyle: { color: g.color, borderColor: '#fff', borderWidth: 0.6, opacity: 0.9 },
+        emphasis: { scale: 1.6 },
+      })),
+      { type: 'line', name: '_trend', silent: true, showSymbol: false, z: 10,
+        data: [[minX, fit.intercept + fit.slope * minX], [maxX, fit.intercept + fit.slope * maxX]],
+        lineStyle: { color: '#374151', type: 'dashed', width: 1.4 }, tooltip: { show: false } },
+    ],
+  }, { notMerge: true });
+}
+
+function focusWeek(row) {
+  if (window.innerWidth < 1100) setView('time');
+  const t = row.t;
+  const idx = rows.findIndex(r => r.t === t);
+  if (idx < 0) return;
+  const span = Date.parse(state.til) - Date.parse(state.fra);
+  if (t < Date.parse(state.fra) || t > Date.parse(state.til)) {
+    const half = span / 2;
+    charts.time.dispatchAction({ type: 'dataZoom', startValue: t - half, endValue: t + half });
+  }
+  charts.time.dispatchAction({ type: 'showTip', seriesIndex: 0, dataIndex: idx });
+  document.getElementById('view-time').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── Visninger på mobil ───────────────────────────────────────
+function setView(v) {
+  state.view = v;
+  markSeg('seg-view', v);
+  for (const id of ['time', 'season', 'scatter']) {
+    document.getElementById(`view-${id}`).classList.toggle('shown', id === v);
+  }
+  requestAnimationFrame(() => Object.values(charts).forEach(c => c.resize()));
+}
+
+// ── Eksport ──────────────────────────────────────────────────
+function downloadCsv() {
+  const m = metrics();
+  const keys = ['pct', 'avvik', 'twh', 'endring', 'pris', 'prisDE', 'prisSE2', 'diffDE', 'diffSE2', 'netto'];
+  const head = ['Periode', 'Dato', ...keys.map(k => `${m[k].label}${m[k].unit ? ` (${m[k].unit})` : ''}`)];
+  const cell = v => v == null ? '' : typeof v === 'number' ? String(+v.toFixed(3)).replace('.', ',') : (/[;"]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const lines = [head, ...rows.filter(inWindow).map(r => [r.label, r.dato, ...keys.map(k => r[k])])].map(r => r.map(cell).join(';'));
+  const blob = new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `utforsk_${activeKey}_${state.res}_${state.fra}_${state.til}.csv`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function downloadPng(which) {
+  const a = document.createElement('a');
+  a.href = charts[which].getDataURL({ pixelRatio: 2, backgroundColor: '#fff' });
+  a.download = `utforsk_${which}_${activeKey}.png`;
+  a.click();
+}
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+// ── Oppdatering ──────────────────────────────────────────────
+function renderControls() {
+  markSeg('seg-range', rangeKey());
+  markSeg('seg-res', state.res);
+  markSeg('seg-color', state.sf);
+  fillSelects();
+}
+
+function renderAll() {
+  renderControls();
+  renderSummary();
+  drawTimeline();
+  drawSeason();
+  drawScatter();
+  writeUrl();
+}
+
+// Kalles når tidsvinduet endres i tidslinjen
+let zoomTimer = null;
+function onZoom() {
+  clearTimeout(zoomTimer);
+  zoomTimer = setTimeout(() => {
+    const dz = charts.time.getOption().dataZoom[0];
+    const iso = v => new Date(v).toISOString().slice(0, 10);
+    state.fra = iso(dz.startValue);
+    state.til = iso(dz.endValue);
+    markSeg('seg-range', rangeKey());
+    renderSummary();
+    drawScatter();
+    writeUrl();
+  }, 120);
+}
+
+function setRange(v) {
+  state.til = lastDate;
+  state.fra = v === 'alt' ? rows[0].dato : v === '2015' ? '2015-01-01' : addYears(lastDate, -Number(v));
+  renderAll();
+}
+
+function bind() {
+  document.getElementById('tabs-bar').addEventListener('click', e => {
+    const key = e.target.dataset?.key;
+    if (!key || key === activeKey) return;
+    activeKey = key;
+    renderTabs();
+    recompute();
+    renderAll();
+  });
+  const seg = (id, fn) => document.getElementById(id).addEventListener('click', e => {
+    const v = e.target.closest('button')?.dataset.v;
+    if (v) fn(v);
+  });
+  seg('seg-range', setRange);
+  seg('seg-res', v => { state.res = v; recompute(); renderAll(); });
+  seg('seg-color', v => { state.sf = v; markSeg('seg-color', v); drawScatter(); writeUrl(); });
+  seg('seg-view', setView);
+  for (const [id, key, draw] of [['sc-x', 'sx', drawScatter], ['sc-y', 'sy', drawScatter], ['sc-season', 'ss', drawScatter], ['season-metric', 'sm', drawSeason]]) {
+    document.getElementById(id).addEventListener('change', e => { state[key] = e.target.value; draw(); writeUrl(); });
+  }
+  document.getElementById('season-years').addEventListener('click', e => {
+    const y = Number(e.target.closest('[data-year]')?.dataset.year);
+    if (!y) return;
+    if (state.aar.includes(y)) setYears(state.aar.filter(x => x !== y));
+    else if (state.aar.length < 6) setYears([...state.aar, y]);
+    else { toast('Maks seks år samtidig'); return; }
+    drawSeason();
+    writeUrl();
+  });
+  document.getElementById('presets').addEventListener('click', e => {
+    const i = e.target.closest('[data-preset]')?.dataset.preset;
+    if (i != null) applyPreset(presets()[Number(i)]);
+  });
+  document.getElementById('btn-csv').addEventListener('click', downloadCsv);
+  document.getElementById('btn-share').addEventListener('click', async () => {
+    try { await navigator.clipboard.writeText(location.href); toast('Lenken er kopiert'); }
+    catch { toast('Kunne ikke kopiere – bruk adressefeltet'); }
+  });
+  for (const b of document.querySelectorAll('[data-png]')) b.addEventListener('click', () => downloadPng(b.dataset.png));
+
+  charts.time.on('datazoom', onZoom);
+  charts.scatter.on('click', p => p.data?.row && focusWeek(p.data.row));
+
+  let resizeTimer = null;
+  window.addEventListener('resize', () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => { Object.values(charts).forEach(c => c.resize()); drawTimeline(); }, 150);
+  });
+}
+
+async function init() {
+  const pricesPromise = fetchPrices();
+  const flowsPromise = fetchFlows();
+  try {
+    if (!window.echarts) throw new Error('Kunne ikke laste grafbiblioteket (ECharts).');
+    allData = await loadReservoirData();
+    [priceData, flowData] = await Promise.all([pricesPromise, flowsPromise]);
+    const latest = getRows(allData, 'LAND').at(-1);
+    document.getElementById('hdr-sub').textContent = latest ? `Siste: ${weekLabel(latest)}` : '';
+
+    readUrl();
+    recompute();
+    state.til ??= lastDate;
+    state.fra ??= addYears(lastDate, -5);
+    if (!state.aar.length) setYears([CURRENT_YEAR - 2, CURRENT_YEAR - 1, CURRENT_YEAR]);
+    else setYears(state.aar);
+
+    document.getElementById('presets').insertAdjacentHTML('beforeend',
+      presets().map((p, i) => `<button class="chip" data-preset="${i}">${p.label}</button>`).join(''));
+    renderTabs();
+    setView(state.view);
+    for (const id of ['time', 'season', 'scatter']) charts[id] = echarts.init(document.getElementById(`chart-${id}`), null, { renderer: 'canvas' });
+    bind();
+    renderAll();
+  } catch (err) {
+    document.getElementById('hdr-sub').textContent = 'Feil ved lasting';
+    document.getElementById('summary').innerHTML =
+      `<div class="error-box"><strong>Kunne ikke laste data</strong><br>${escapeHtml(err.message)}</div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
