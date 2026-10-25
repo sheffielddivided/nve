@@ -5,6 +5,8 @@ Data om strømsituasjonen i Norge
 
 `docs/prices.json` inneholder ukesnitt av day-ahead-områdepriser (EUR/MWh) for NO1–NO5,
 hentet fra [ENTSO-E Transparency Platform](https://transparency.entsoe.eu/) av
-`scripts/hent_priser.py`. Workflowen *Oppdater strømpriser* kjører daglig og krever
+`scripts/hent_priser.py`, sammen med tysk pris (DE-LU) som brukes i analysen. Workflowen *Oppdater strømpriser* kjører daglig og krever
 repo-secreten `ENTSOE_TOKEN`. Kjør den manuelt med «full» avkrysset for å hente hele
 historikken på nytt.
+
+`docs/data.html` viser fylling og priser i tabell per område, med nedlasting til Excel og CSV.

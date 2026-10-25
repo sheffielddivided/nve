@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Hent day-ahead-områdepriser for NO1–NO5 fra ENTSO-E og lagre ukesnitt.
+"""Hent day-ahead-områdepriser for NO1–NO5 og DE-LU fra ENTSO-E og lagre ukesnitt.
 
 Skriptet henter dokumenttype A44 (day-ahead-priser) fra ENTSO-E Transparency
 Platform, regner ut tidsvektet snitt per ISO-uke (norsk tid, samme ukeinndeling
@@ -10,7 +10,7 @@ Bruk:
     ENTSOE_TOKEN=... python3 scripts/hent_priser.py --full   # hent alt fra 2015
 
 Uten --full hentes bare fra starten av fjoråret, og eldre uker beholdes fra
-eksisterende fil. Finnes ikke fila, hentes alt.
+eksisterende fil. Serier som mangler i fila, hentes alltid fra start.
 """
 
 import argparse
@@ -38,6 +38,15 @@ AREAS = {
     'NO3': '10YNO-3--------J',
     'NO4': '10YNO-4--------9',
     'NO5': '10Y1001A1001A48H',
+}
+
+# Referansepris for analysen. Tyskland, Østerrike og Luxembourg var ett budområde
+# fram til 1. oktober 2018; deretter DE-LU. Hver kode gjelder fra og med datoen.
+REFERENCE = {
+    'DE-LU': [
+        ('10Y1001A1001A63L', date.min),                  # DE-AT-LU
+        ('10Y1001A1001A82H', date(2018, 10, 1)),        # DE-LU
+    ],
 }
 
 
@@ -170,15 +179,41 @@ def monday_of_week_containing(d):
     return d - timedelta(days=d.weekday())
 
 
-def fetch_area(token, eic, from_day):
-    start = datetime.combine(from_day, datetime.min.time(), OSLO).astimezone(timezone.utc)
+def oslo_midnight_utc(d):
+    return datetime.combine(d, datetime.min.time(), OSLO).astimezone(timezone.utc)
+
+
+def fetch_area(token, segments, from_day):
+    """Hent ukesnitt fra from_day. segments: [(eic, gyldig_fra)], sortert på dato."""
     stop = datetime.now(timezone.utc).replace(minute=0, second=0, microsecond=0) + timedelta(days=2)
     periods = []
-    while start < stop:
-        end = min(start + timedelta(days=365), stop)
-        periods += parse_periods(fetch_xml(token, eic, start, end))
-        start = end
+    for i, (eic, valid_from) in enumerate(segments):
+        start = oslo_midnight_utc(max(from_day, valid_from))
+        seg_stop = oslo_midnight_utc(segments[i + 1][1]) if i + 1 < len(segments) else stop
+        while start < seg_stop:
+            end = min(start + timedelta(days=365), seg_stop)
+            periods += parse_periods(fetch_xml(token, eic, start, end))
+            start = end
     return weekly_averages(periods)
+
+
+def update_series(token, name, segments, old_rows, from_day):
+    """Hent én serie og flett med eldre uker fra eksisterende fil."""
+    if old_rows is None:
+        from_day = monday_of_week_containing(date(FIRST_YEAR, 1, 1))
+    from_key = tuple(from_day.isocalendar()[:2])
+    print(f'Henter {name} fra {from_day}…', flush=True)
+    weeks = fetch_area(token, segments, from_day)
+    if not weeks:
+        sys.exit(f'Fikk ingen priser for {name}; beholder eksisterende fil.')
+    for r in old_rows or []:
+        key = (r['iso_aar'], r['iso_uke'])
+        if key < from_key:
+            weeks.setdefault(key, (r['pris'], r['timer']))
+    return [
+        {'iso_aar': y, 'iso_uke': w, 'pris': round(p, 2), 'timer': round(h, 2)}
+        for (y, w), (p, h) in sorted(weeks.items())
+    ]
 
 
 # ── Hovedprogram ─────────────────────────────────────────────
@@ -199,38 +234,33 @@ def main():
     if not token:
         sys.exit('Mangler miljøvariabelen ENTSOE_TOKEN.')
 
-    existing = None if args.full else load_existing()
-    first_year = FIRST_YEAR if existing is None else datetime.now(OSLO).year - 1
-    from_day = monday_of_week_containing(date(first_year, 1, 1))
-    from_key = tuple(from_day.isocalendar()[:2])
+    existing = (None if args.full else load_existing()) or {}
+    from_day = monday_of_week_containing(date(datetime.now(OSLO).year - 1, 1, 1))
 
-    areas = {}
-    for name, eic in AREAS.items():
-        print(f'Henter {name} fra {from_day}…', flush=True)
-        weeks = fetch_area(token, eic, from_day)
-        if not weeks:
-            sys.exit(f'Fikk ingen priser for {name}; beholder eksisterende fil.')
-        if existing is not None:
-            for r in existing['omrader'].get(name, []):
-                key = (r['iso_aar'], r['iso_uke'])
-                if key < from_key:
-                    weeks.setdefault(key, (r['pris'], r['timer']))
-        areas[name] = [
-            {'iso_aar': y, 'iso_uke': w, 'pris': round(p, 2), 'timer': round(h, 2)}
-            for (y, w), (p, h) in sorted(weeks.items())
-        ]
+    areas = {
+        name: update_series(token, name, [(eic, date.min)],
+                            existing.get('omrader', {}).get(name), from_day)
+        for name, eic in AREAS.items()
+    }
+    reference = {
+        name: update_series(token, name, segments,
+                            existing.get('referanse', {}).get(name), from_day)
+        for name, segments in REFERENCE.items()
+    }
 
     out = {
         'kilde': 'ENTSO-E Transparency Platform, day-ahead-priser (A44)',
         'enhet': 'EUR/MWh',
         'omrader': areas,
+        'referanse': reference,
     }
     tmp = OUT_FILE + '.tmp'
     with open(tmp, 'w', encoding='utf-8') as f:
         json.dump(out, f, ensure_ascii=False, separators=(',', ':'))
         f.write('\n')
     os.replace(tmp, OUT_FILE)
-    print(f'Skrev {sum(len(v) for v in areas.values())} ukesnitt til {os.path.normpath(OUT_FILE)}')
+    count = sum(len(v) for v in [*areas.values(), *reference.values()])
+    print(f'Skrev {count} ukesnitt til {os.path.normpath(OUT_FILE)}')
 
 
 if __name__ == '__main__':

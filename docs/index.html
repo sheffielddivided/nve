@@ -49,6 +49,16 @@
     .header-inner { display: flex; align-items: center; gap: 10px; }
     header h1 { font-size: 1.05rem; font-weight: 700; letter-spacing: -.02em; }
     header p  { font-size: .72rem; opacity: .75; margin-top: 2px; }
+    .hdr-link {
+      margin-left: auto;
+      color: #fff;
+      font-size: .78rem;
+      font-weight: 600;
+      text-decoration: none;
+      border: 1px solid rgba(255,255,255,.4);
+      border-radius: 8px;
+      padding: 6px 10px;
+    }
 
     /* ── Region tabs ── */
     .tabs-bar {
@@ -204,6 +214,33 @@
     }
     .error-box strong { display: block; margin-bottom: 4px; }
 
+    /* ── Analyse ── */
+    .seg-row { display: flex; flex-wrap: wrap; gap: 8px 14px; margin: 12px 0 10px; }
+    .seg {
+      display: inline-flex;
+      background: var(--tint);
+      border-radius: 8px;
+      padding: 2px;
+    }
+    .seg button {
+      border: none;
+      background: none;
+      font: inherit;
+      font-size: .73rem;
+      color: var(--sub);
+      padding: 5px 9px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .seg button.active { background: var(--card); color: var(--navy); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+    .facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .fact { background: var(--tint); border-radius: 8px; padding: 8px 10px; }
+    .fact .val { font-size: .88rem; font-weight: 700; color: var(--navy); }
+    .fact .lbl { font-size: .68rem; color: var(--sub); margin-top: 2px; line-height: 1.35; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .note { font-size: .7rem; color: var(--sub); line-height: 1.45; margin-top: 10px; }
+    .chart-wrap.tall { height: 300px; }
+
     /* ── Footer ── */
     footer {
       text-align: center;
@@ -244,6 +281,7 @@
       <h1>Magasinstatistikk</h1>
       <p id="hdr-sub">Laster data…</p>
     </div>
+    <a class="hdr-link" href="data.html">Data</a>
   </div>
 </header>
 
@@ -266,23 +304,9 @@
   &nbsp;·&nbsp; Oppdateres ukentlig
 </footer>
 
+<script src="felles.js"></script>
 <script>
 'use strict';
-
-const LOCAL_DATA   = 'data.json';
-const LOCAL_PRICES = 'prices.json';
-const API          = 'https://biapi.nve.no/magasinstatistikk/api/Magasinstatistikk/HentOffentligData';
-const CURRENT_YEAR = new Date().getFullYear();
-const HIST_YEARS   = 20;
-
-const REGIONS = [
-  { key: 'LAND', label: 'Norge', name: 'Hele Norge',        match: d => d.omrType !== 'EL' },
-  { key: 'NO1',  label: 'NO1',   name: 'NO1 – Østlandet',  match: d => d.omrType === 'EL' && d.omrnr === 1 },
-  { key: 'NO2',  label: 'NO2',   name: 'NO2 – Sørlandet',  match: d => d.omrType === 'EL' && d.omrnr === 2 },
-  { key: 'NO3',  label: 'NO3',   name: 'NO3 – Midt-Norge', match: d => d.omrType === 'EL' && d.omrnr === 3 },
-  { key: 'NO4',  label: 'NO4',   name: 'NO4 – Nord-Norge', match: d => d.omrType === 'EL' && d.omrnr === 4 },
-  { key: 'NO5',  label: 'NO5',   name: 'NO5 – Vestlandet', match: d => d.omrType === 'EL' && d.omrnr === 5 },
-];
 
 // ── Norway map SVG ───────────────────────────────────────────
 // Accurate region paths provided by user; viewBox "0 0 292.8 348.2"
@@ -309,59 +333,14 @@ function norwayMapSVG(activeKey) {
          ` xmlns="http://www.w3.org/2000/svg">${fills}${strokes}</svg>`;
 }
 
-// X-axis: week number → month label (show label at first week of each month)
-const MONTH_LABEL = {
-   1:'Jan',  5:'Feb',  9:'Mar', 14:'Apr', 18:'Mai', 23:'Jun',
-  27:'Jul', 31:'Aug', 36:'Sep', 40:'Okt', 45:'Nov', 49:'Des',
-};
-
 let allData    = [];
 let activeKey  = 'LAND';
 let lineChart  = null;
 let donutChart = null;
 let priceChart = null;
-let priceData  = null;   // { enhet, omrader: { NO1: [{ iso_aar, iso_uke, pris, timer }] } }
-
-// ── Normalise fill percentage ─────────────────────────────────
-// API may return fyllingsgrad as fraction (0–1) or percent (0–100).
-// Detect scale once from first batch of non-zero historical rows.
-let pctScale = null;
-
-function detectScale(rows) {
-  if (pctScale !== null) return;
-  const sample = rows.filter(r => r.fyllingsgrad > 0).slice(0, 200);
-  if (!sample.length) return;
-  const maxVal = Math.max(...sample.map(r => r.fyllingsgrad));
-  pctScale = maxVal <= 1 ? 100 : 1;
-}
-
-function calcPct(row) {
-  const fg = row.fyllingsgrad;
-  if (fg != null && fg !== 0 && pctScale !== null) {
-    return fg * pctScale;
-  }
-  // Fallback: derive from energy values
-  if (row.fylling_TWh > 0 && row.kapasitet_TWh > 0) {
-    return (row.fylling_TWh / row.kapasitet_TWh) * 100;
-  }
-  return null;
-}
-
-// ── Median helper ─────────────────────────────────────────────
-function median(arr) {
-  if (!arr.length) return null;
-  const s = [...arr].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
-
-// ── Filter & sort rows for selected region ────────────────────
-function getRows(key) {
-  const cfg = REGIONS.find(r => r.key === key);
-  return allData
-    .filter(cfg.match)
-    .sort((a, b) => (a.iso_aar - b.iso_aar) || (a.iso_uke - b.iso_uke));
-}
+let priceData  = null;   // { enhet, omrader: { NO1: [...] }, referanse: { 'DE-LU': [...] } }
+let scatterChart = null;
+const analysis = { y: 'pris', period: 'alle' };
 
 // ── Build per-week chart data ─────────────────────────────────
 function buildChartData(rows) {
@@ -394,28 +373,7 @@ function buildChartData(rows) {
   };
 }
 
-// ── Prices (ENTSO-E day-ahead, ukesnitt) ──────────────────────
-// For «Norge» brukes et enkelt snitt av NO1–NO5 for uker der alle områdene har pris.
-function getPriceRows(key) {
-  const areas = priceData?.omrader;
-  if (!areas) return [];
-  if (areas[key]) return areas[key];
-  const names = Object.keys(areas);
-  const byWeek = {};
-  for (const n of names) {
-    for (const r of areas[n]) {
-      const k = `${r.iso_aar}-${r.iso_uke}`;
-      (byWeek[k] ??= { iso_aar: r.iso_aar, iso_uke: r.iso_uke, sum: 0, n: 0 });
-      byWeek[k].sum += r.pris;
-      byWeek[k].n++;
-    }
-  }
-  return Object.values(byWeek)
-    .filter(w => w.n === names.length)
-    .map(w => ({ iso_aar: w.iso_aar, iso_uke: w.iso_uke, pris: w.sum / w.n }))
-    .sort((a, b) => (a.iso_aar - b.iso_aar) || (a.iso_uke - b.iso_uke));
-}
-
+// ── Price chart data (inneværende år, fjoråret, median) ──────
 function buildPriceChartData(rows) {
   const weeks = Array.from({ length: 52 }, (_, i) => i + 1);
   const cur = {}, prev = {}, hist = {};
@@ -438,11 +396,6 @@ function buildPriceChartData(rows) {
   };
 }
 
-// ── Week label helper ─────────────────────────────────────────
-function weekLabel(r) {
-  return `Uke ${r.iso_uke}, ${r.iso_aar}`;
-}
-
 // ── Tabs ─────────────────────────────────────────────────────
 function renderTabs() {
   document.getElementById('tabs-bar').innerHTML = REGIONS.map(r => `
@@ -460,7 +413,7 @@ function switchRegion(key) {
 // ── Full view ─────────────────────────────────────────────────
 function renderView() {
   const cfg    = REGIONS.find(r => r.key === activeKey);
-  const rows   = getRows(activeKey);
+  const rows   = getRows(allData, activeKey);
   const latest = rows[rows.length - 1];
 
   if (!latest) {
@@ -494,7 +447,7 @@ function renderView() {
   const diffSign  = diffMedian >= 0 ? '+' : '';
   const diffClass = diffMedian >= 0 ? 'up' : 'down';
 
-  const priceRows  = getPriceRows(activeKey);
+  const priceRows  = getPriceRows(priceData, activeKey);
   const priceNow   = priceRows.find(r => r.iso_aar === latest.iso_aar && r.iso_uke === latest.iso_uke);
   const priceChartData = priceRows.length ? buildPriceChartData(priceRows) : null;
   const priceName  = activeKey === 'LAND' ? 'Snitt NO1–NO5' : cfg.name;
@@ -570,12 +523,42 @@ function renderView() {
       <div class="chart-wrap">
         <canvas id="price-canvas"></canvas>
       </div>
+    </div>
+
+    <div class="chart-card">
+      <div class="chart-head">
+        <div class="title">Analyse: magasinfylling og pris</div>
+        <div class="sub">${priceName} · hver prikk er én uke fra 2015</div>
+      </div>
+      <div class="seg-row">
+        <div class="seg" id="seg-y">
+          <button data-v="pris">€/MWh</button>
+          <button data-v="pct">% av tysk pris</button>
+        </div>
+        <div class="seg" id="seg-period">
+          <button data-v="alle">Alle år</button>
+          <button data-v="tidlig">2015–2020</button>
+          <button data-v="sen">2021–</button>
+        </div>
+      </div>
+      <div id="analysis-body"></div>
     </div>` : ''}
   `;
 
   drawDonut(pct);
   drawYearChart(chartData);
   drawPriceChart(priceChartData);
+  if (priceChartData) {
+    for (const [id, field] of [['seg-y', 'y'], ['seg-period', 'period']]) {
+      document.getElementById(id).onclick = e => {
+        const v = e.target.dataset?.v;
+        if (!v) return;
+        analysis[field] = v;
+        renderAnalysis();
+      };
+    }
+    renderAnalysis();
+  }
 }
 
 // ── Donut gauge ───────────────────────────────────────────────
@@ -814,58 +797,209 @@ function drawPriceChart(data) {
   });
 }
 
-// ── Auto-detect total-Norway aggregation ──────────────────────
-// After data is loaded, find the (omrType, omrnr) pair outside the
-// five EL price areas that has the most rows. That pair is the true
-// whole-country total, and we update the LAND match function to it.
-function detectLandFilter() {
-  const elNums = new Set([1, 2, 3, 4, 5]);
-  const counts = {};
-  for (const d of allData) {
-    if (d.omrType === 'EL' && elNums.has(d.omrnr)) continue;
-    const k = `${d.omrType}|${d.omrnr}`;
-    counts[k] = (counts[k] || 0) + 1;
+// ── Analyse: fylling vs. normalår mot pris ────────────────────
+const PERIODS = {
+  alle:   { label: 'alle år',   test: y => true },
+  tidlig: { label: '2015–2020', test: y => y <= 2020 },
+  sen:    { label: '2021–',     test: y => y >= 2021 },
+};
+
+function ranks(values) {
+  const idx = values.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]);
+  const r = new Array(values.length);
+  for (let i = 0; i < idx.length;) {
+    let j = i;
+    while (j + 1 < idx.length && idx[j + 1][0] === idx[i][0]) j++;
+    for (let k = i; k <= j; k++) r[idx[k][1]] = (i + j) / 2 + 1;
+    i = j + 1;
   }
-  const entries = Object.entries(counts);
-  if (!entries.length) return;
-  const [best] = entries.sort((a, b) => b[1] - a[1]);
-  const [bestType, bestNrStr] = best[0].split('|');
-  const bestNr = Number(bestNrStr);
-  const landRegion = REGIONS.find(r => r.key === 'LAND');
-  if (landRegion) landRegion.match = d => d.omrType === bestType && d.omrnr === bestNr;
+  return r;
+}
+
+function pearson(xs, ys) {
+  const n = xs.length;
+  const mx = xs.reduce((a, b) => a + b, 0) / n;
+  const my = ys.reduce((a, b) => a + b, 0) / n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++) {
+    sxy += (xs[i] - mx) * (ys[i] - my);
+    sxx += (xs[i] - mx) ** 2;
+    syy += (ys[i] - my) ** 2;
+  }
+  return { r: sxy / Math.sqrt(sxx * syy), slope: sxy / sxx, intercept: my - (sxy / sxx) * mx };
+}
+
+function strengthWord(rho) {
+  const a = Math.abs(rho);
+  return a < 0.2 ? 'Ingen tydelig' : a < 0.4 ? 'Svak' : a < 0.6 ? 'Moderat' : 'Sterk';
+}
+
+function renderAnalysis() {
+  for (const [id, field] of [['seg-y', 'y'], ['seg-period', 'period']]) {
+    for (const b of document.querySelectorAll(`#${id} button`)) {
+      b.classList.toggle('active', b.dataset.v === analysis[field]);
+    }
+  }
+
+  const yField = analysis.y === 'pct' ? 'prisPctDE' : 'pris';
+  const yUnit  = analysis.y === 'pct' ? '% av tysk pris' : '€/MWh';
+  const fmtY   = v => analysis.y === 'pct' ? `${v.toFixed(0)} %` : `${v.toFixed(1)} €/MWh`;
+  const period = PERIODS[analysis.period];
+
+  const table  = buildWeekTable(allData, priceData, activeKey);
+  const usable = table.filter(r => r.avvik != null && r[yField] != null);
+  const pts    = usable.filter(r => period.test(r.iso_aar));
+  const latest = usable[usable.length - 1];
+  const body   = document.getElementById('analysis-body');
+
+  if (pts.length < 20) {
+    body.innerHTML = `<div class="note">For få uker med både fylling og pris til å si noe om sammenhengen.</div>`;
+    if (scatterChart) { scatterChart.destroy(); scatterChart = null; }
+    return;
+  }
+
+  const xs  = pts.map(r => r.avvik);
+  const ys  = pts.map(r => r[yField]);
+  const rho = pearson(ranks(xs), ranks(ys)).r;
+  const fit = pearson(xs, ys);
+  const per10 = -fit.slope * 10;   // endring i y når fyllingen er 10 pp lavere
+  const dir = rho < 0 ? 'lav fylling, høy pris' : 'lav fylling, lav pris';
+
+  let nowFact = '';
+  if (latest) {
+    const model = fit.intercept + fit.slope * latest.avvik;
+    const sign  = latest.avvik >= 0 ? '+' : '';
+    nowFact = `
+      <div class="fact">
+        <div class="val">${fmtY(latest[yField])}</div>
+        <div class="lbl">Faktisk uke ${latest.iso_uke}, ${latest.iso_aar} (fylling ${sign}${latest.avvik.toFixed(1)} pp).
+          Trendlinjen tilsier ${fmtY(model)}.</div>
+      </div>`;
+  }
+
+  body.innerHTML = `
+    <div class="facts">
+      <div class="fact">
+        <div class="val">${strengthWord(rho)} (ρ = ${rho.toFixed(2)})</div>
+        <div class="lbl">Rangkorrelasjon, ${period.label}, ${pts.length} uker${Math.abs(rho) >= 0.2 ? ` · ${dir}` : ''}</div>
+      </div>
+      <div class="fact">
+        <div class="val">${per10 >= 0 ? '+' : '−'}${analysis.y === 'pct' ? `${Math.abs(per10).toFixed(0)} pp` : fmtY(Math.abs(per10))}</div>
+        <div class="lbl">Typisk prisforskjell når fyllingen er 10 pp lavere enn normalt</div>
+      </div>
+      ${nowFact}
+    </div>
+    <div class="legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#b6bfcc"></span>Tidligere år</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#0072b0"></span>${CURRENT_YEAR - 1}</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#d97706"></span>${CURRENT_YEAR}</span>
+      <span class="legend-item"><span class="legend-dashed"></span>Trendlinje</span>
+    </div>
+    <div class="chart-wrap tall" style="margin-top:10px"><canvas id="scatter-canvas"></canvas></div>
+    <div class="note">
+      Vannrett akse: fyllingsgrad minus normalår (median ${CURRENT_YEAR - HIST_YEARS}–${CURRENT_YEAR - 1}) for samme uke.
+      ${analysis.y === 'pct'
+        ? 'Loddrett akse: norsk pris i prosent av tysk pris (DE-LU) samme uke – det fjerner mye av effekten av gass- og kullpriser. 100 % betyr lik pris.'
+        : 'Loddrett akse: ukesnitt av day-ahead-prisen. Prisnivået påvirkes også sterkt av gasspriser og prisene på kontinentet.'}
+      Sammenheng betyr ikke årsak, og uker som følger etter hverandre er ikke uavhengige observasjoner.
+    </div>`;
+
+  const toPt = r => ({ x: r.avvik, y: r[yField], row: r });
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const group = (label, filter, color, radius, order) => ({
+    type: 'scatter',
+    label,
+    data: pts.filter(filter).map(toPt),
+    backgroundColor: color,
+    borderColor: '#fff',
+    borderWidth: 1,
+    pointRadius: radius,
+    pointHoverRadius: radius + 2,
+    order,
+  });
+
+  const datasets = [
+    group('Tidligere år', r => r.iso_aar < CURRENT_YEAR - 1, '#b6bfcc', 3, 4),
+    group(`${CURRENT_YEAR - 1}`, r => r.iso_aar === CURRENT_YEAR - 1, '#0072b0', 3.5, 3),
+    group(`${CURRENT_YEAR}`, r => r.iso_aar === CURRENT_YEAR, '#d97706', 4, 2),
+    {
+      type: 'line',
+      label: 'Trendlinje',
+      data: [{ x: minX, y: fit.intercept + fit.slope * minX }, { x: maxX, y: fit.intercept + fit.slope * maxX }],
+      borderColor: '#6b7280',
+      borderWidth: 1.5,
+      borderDash: [5, 4],
+      pointRadius: 0,
+      pointHoverRadius: 0,
+      order: 1,
+    },
+  ];
+  if (latest && period.test(latest.iso_aar)) {
+    datasets.push({
+      type: 'scatter',
+      label: 'Siste uke',
+      data: [toPt(latest)],
+      backgroundColor: '#d97706',
+      borderColor: '#111827',
+      borderWidth: 2,
+      pointRadius: 7,
+      pointHoverRadius: 8,
+      order: 0,
+    });
+  }
+
+  if (scatterChart) { scatterChart.destroy(); scatterChart = null; }
+  scatterChart = new Chart(document.getElementById('scatter-canvas'), {
+    data: { datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'nearest', intersect: true },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          backgroundColor: '#fff',
+          titleColor: '#111',
+          bodyColor: '#444',
+          borderColor: '#e5e7eb',
+          borderWidth: 1,
+          padding: 10,
+          filter: item => item.raw?.row,
+          callbacks: {
+            title: items => weekLabel(items[0].raw.row),
+            label: ctx => {
+              const r = ctx.raw.row;
+              const sign = r.avvik >= 0 ? '+' : '';
+              return [`Fylling vs. normal: ${sign}${r.avvik.toFixed(1)} pp`, `${yUnit === '€/MWh' ? 'Pris' : 'Pris vs. Tyskland'}: ${fmtY(r[yField])}`];
+            },
+          }
+        }
+      },
+      scales: {
+        x: {
+          type: 'linear',
+          title: { display: true, text: 'Fylling vs. normalår (pp)', font: { size: 10 }, color: '#6b7280' },
+          ticks: { callback: v => (v > 0 ? '+' : '') + v, font: { size: 10 }, color: '#9ca3af', maxTicksLimit: 8 },
+          grid: { color: ctx => ctx.tick.value === 0 ? '#d1d5db' : '#f0f2f5' },
+          border: { display: false },
+        },
+        y: {
+          min: Math.min(...ys) >= 0 ? 0 : undefined,
+          title: { display: true, text: yUnit, font: { size: 10 }, color: '#6b7280' },
+          ticks: { font: { size: 10 }, color: '#9ca3af', maxTicksLimit: 6 },
+          grid: { color: ctx => analysis.y === 'pct' && ctx.tick.value === 100 ? '#d1d5db' : '#f0f2f5' },
+          border: { display: false },
+        }
+      }
+    }
+  });
 }
 
 // ── Bootstrap ────────────────────────────────────────────────
-async function fetchData(url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`HTTP ${res.status} – ${res.statusText}`);
-  const data = await res.json();
-  if (!Array.isArray(data) || !data.length) throw new Error('Tom respons');
-  return data;
-}
-
-// Prisene er valgfrie: mangler fila, vises siden uten prisgraf.
-async function fetchPrices() {
-  try {
-    const res = await fetch(LOCAL_PRICES);
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data && data.omrader ? data : null;
-  } catch {
-    return null;
-  }
-}
-
 async function init() {
   const pricesPromise = fetchPrices();
   try {
-    try {
-      allData = await fetchData(LOCAL_DATA);
-    } catch (localErr) {
-      // Lokal fil mangler eller er ugyldig – fall tilbake til NVE sitt API direkte.
-      allData = await fetchData(API);
-    }
-    detectLandFilter();
+    allData = await loadReservoirData();
     priceData = await pricesPromise;
     renderTabs();
     renderView();
